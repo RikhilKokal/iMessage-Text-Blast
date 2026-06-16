@@ -1,0 +1,238 @@
+/* ── Shared panel layout ─────────────────────────────────────────────────── */
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 28px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.title-area { flex: 1; min-width: 0; }
+
+.edit-hint {
+  color: var(--text-2);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.name-editor {
+  font-weight: 700;
+  border: 2px solid var(--accent);
+  border-radius: 6px;
+  padding: 2px 6px;
+  width: 100%;
+}
+
+.detail-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Card ────────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: visible;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.card-header h2 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Variable picker ─────────────────────────────────────────────────────── */
+.var-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.var-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 2px;
+}
+.var-btn {
+  padding: 2px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--accent-tint-border);
+  background: var(--accent-tint);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-tint-text);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  line-height: 1.6;
+}
+.var-btn:hover { background: #cce2ff; border-color: var(--accent-tint-text); }
+
+/* ── Preview placeholder ─────────────────────────────────────────────────── */
+.preview-placeholder {
+  padding: 20px 16px;
+  font-size: 13px;
+  color: var(--text-2);
+  text-align: center;
+  font-style: italic;
+}
+
+/* ── Attachments ─────────────────────────────────────────────────────────── */
+.attachment-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: -16px;
+  flex-wrap: wrap;
+}
+
+.attachment-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.btn-attach {
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.btn-attach:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.attachment-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-soft, rgba(99,102,241,0.12));
+  border: 1px solid var(--accent);
+  border-radius: 20px;
+  padding: 3px 10px 3px 12px;
+  font-size: 12px;
+  color: var(--accent);
+  max-width: 260px;
+}
+
+.attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.attachment-remove:hover { opacity: 1; }
+
+/* ── Send info ───────────────────────────────────────────────────────────── */
+.send-info { font-size: 13px; color: var(--text-2); }
+.send-info strong { color: var(--text); font-weight: 600; }
+
+/* ── Send buffer ─────────────────────────────────────────────────────────── */
+.buffer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 8px;
+}
+.buffer-row--right {
+  justify-content: flex-end;
+  margin-bottom: 0;
+  margin-top: -12px;
+}
+.buffer-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-top: -12px;
+}
+.buffer-wrap .buffer-row--right {
+  margin-top: 0;
+}
+.buffer-hint {
+  font-size: 10px;
+  color: var(--text-2);
+  opacity: 0.6;
+  margin-top: 2px;
+  margin-bottom: 12px;
+}
+.round-check {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  position: relative;
+  transition: background 0.15s, border-color 0.15s;
+}
+.round-check.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.round-check.checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  width: 4px;
+  height: 7px;
+  border: 1.5px solid #fff;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+.buffer-input {
+  width: 52px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font);
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: center;
+}
+.buffer-input:focus { outline: none; border-color: var(--accent); }
+.buffer-input:disabled { opacity: 0.4; }

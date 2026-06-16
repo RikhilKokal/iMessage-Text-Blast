@@ -1,0 +1,35 @@
+{
+  "name": "imessage-bulk-scheduler",
+  "version": "1.0.0",
+  "description": "Send personalized iMessages to groups of contacts on a schedule",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "vite build && electron-builder",
+    "electron": "electron .",
+    "vite": "vite",
+    "postinstall": "CXXFLAGS='-std=c++20' electron-rebuild -f -w better-sqlite3"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.4.3",
+    "csv-parse": "^5.5.5"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.6.0",
+    "@vitejs/plugin-vue": "^5.0.4",
+    "concurrently": "^8.2.2",
+    "electron": "^29.4.6",
+    "electron-builder": "^24.13.3",
+    "vite": "^5.1.6",
+    "vue": "^3.4.21",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.imessage.bulk-scheduler",
+    "mac": {
+      "category": "public.app-category.productivity",
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
+    }
+  }
+}
