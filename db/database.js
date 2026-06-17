@@ -117,6 +117,14 @@ function createTables() {
   try {
     db.exec(`ALTER TABLE contacts ADD COLUMN service_confirmed INTEGER NOT NULL DEFAULT 0`)
   } catch { /* already exists */ }
+
+  try {
+    db.exec(`ALTER TABLE scheduled_sends ADD COLUMN attachment_path TEXT`)
+  } catch { /* already exists */ }
+
+  try {
+    db.exec(`ALTER TABLE send_history ADD COLUMN attachment_path TEXT`)
+  } catch { /* already exists */ }
 }
 
 // Strip everything except digits, then remove a leading country code 1
@@ -414,11 +422,16 @@ function isContactInGroup(groupId, contactId) {
 
 // ── Scheduled Sends ───────────────────────────────────────────────────────────
 
-function createScheduledSend(groupId, templateText, scheduleType, scheduleData, nextRun, plistId, memberIds = null) {
+function serializeAttachments(attachmentPaths) {
+  const arr = Array.isArray(attachmentPaths) ? attachmentPaths.filter(Boolean) : (attachmentPaths ? [attachmentPaths] : [])
+  return arr.length ? JSON.stringify(arr) : null
+}
+
+function createScheduledSend(groupId, templateText, scheduleType, scheduleData, nextRun, plistId, memberIds = null, attachmentPaths = null) {
   const result = db.prepare(`
     INSERT INTO scheduled_sends
-      (group_id, template_text, schedule_type, schedule_interval, next_run, launchd_plist_id, member_ids)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+      (group_id, template_text, schedule_type, schedule_interval, next_run, launchd_plist_id, member_ids, attachment_path)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     groupId,
     templateText,
@@ -427,6 +440,7 @@ function createScheduledSend(groupId, templateText, scheduleType, scheduleData, 
     nextRun instanceof Date ? nextRun.toISOString() : nextRun,
     plistId,
     memberIds && memberIds.length ? JSON.stringify(memberIds) : null,
+    serializeAttachments(attachmentPaths),
   )
   return { id: result.lastInsertRowid, plistId }
 }
@@ -435,7 +449,7 @@ function getScheduledSends(groupId = null) {
   const base = `
     SELECT ss.id, ss.group_id, ss.template_text, ss.schedule_type,
            ss.schedule_interval, ss.next_run, ss.is_active,
-           ss.created_at, ss.launchd_plist_id, ss.member_ids,
+           ss.created_at, ss.launchd_plist_id, ss.member_ids, ss.attachment_path,
            g.name AS group_name
     FROM scheduled_sends ss
     LEFT JOIN groups g ON g.id = ss.group_id
@@ -451,16 +465,20 @@ function getScheduledSends(groupId = null) {
  * Soft-cancel a scheduled send. Returns the launchd_plist_id so the caller
  * can unload the plist.
  */
+function getScheduledSendById(id) {
+  return db.prepare('SELECT * FROM scheduled_sends WHERE id = ?').get(id) || null
+}
+
 function cancelScheduledSend(id) {
   const row = db.prepare('SELECT launchd_plist_id FROM scheduled_sends WHERE id = ?').get(id)
   db.prepare('UPDATE scheduled_sends SET is_active = 0 WHERE id = ?').run(id)
   return row?.launchd_plist_id || null
 }
 
-function updateScheduledSendDetails(id, templateText, scheduleType, scheduleData, nextRun, memberIds = null) {
+function updateScheduledSendDetails(id, templateText, scheduleType, scheduleData, nextRun, memberIds = null, attachmentPaths = null) {
   db.prepare(`
     UPDATE scheduled_sends
-    SET template_text = ?, schedule_type = ?, schedule_interval = ?, next_run = ?, member_ids = ?
+    SET template_text = ?, schedule_type = ?, schedule_interval = ?, next_run = ?, member_ids = ?, attachment_path = ?
     WHERE id = ?
   `).run(
     templateText,
@@ -468,6 +486,7 @@ function updateScheduledSendDetails(id, templateText, scheduleType, scheduleData
     JSON.stringify(scheduleData),
     nextRun instanceof Date ? nextRun.toISOString() : nextRun,
     memberIds && memberIds.length ? JSON.stringify(memberIds) : null,
+    serializeAttachments(attachmentPaths),
     id,
   )
 }
@@ -494,11 +513,13 @@ function getSendRecipients(sendHistoryId) {
   return db.prepare('SELECT name, phone, received FROM send_history_recipients WHERE send_history_id = ? ORDER BY name').all(sendHistoryId)
 }
 
-function logSendAttempt(groupId, templateText, status, errorLog = null, totalMembersAtSend = null) {
+function logSendAttempt(groupId, templateText, status, errorLog = null, totalMembersAtSend = null, attachmentPaths = null) {
+  const arr = Array.isArray(attachmentPaths) ? attachmentPaths.filter(Boolean) : (attachmentPaths ? [attachmentPaths] : [])
+  const attachmentJson = arr.length ? JSON.stringify(arr) : null
   const result = db.prepare(`
-    INSERT INTO send_history (group_id, template_text, status, error_log, total_members_at_send)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(groupId, templateText, status, errorLog || null, totalMembersAtSend)
+    INSERT INTO send_history (group_id, template_text, status, error_log, total_members_at_send, attachment_path)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(groupId, templateText, status, errorLog || null, totalMembersAtSend, attachmentJson)
   return { id: result.lastInsertRowid }
 }
 
@@ -513,7 +534,7 @@ function updateSendStatus(sendHistoryId, status, errorLog = null, sentAt = null)
 function getSendHistory(groupId = null, limit = 100) {
   const base = `
     SELECT sh.id, sh.template_text, sh.status, sh.error_log,
-           sh.created_at, sh.sent_at,
+           sh.created_at, sh.sent_at, sh.attachment_path,
            g.name AS group_name,
            sh.total_members_at_send AS group_member_count,
            (SELECT COUNT(*) FROM send_history_recipients WHERE send_history_id = sh.id AND received = 1) AS sent_to_count
@@ -542,6 +563,6 @@ module.exports = {
   // Send history
   logSendAttempt, logSendRecipients, updateSendStatus, getSendHistory, getSendRecipients, clearSendHistory,
   // Scheduled sends
-  createScheduledSend, getScheduledSends, cancelScheduledSend, updateScheduledSendNextRun, updateScheduledSendDetails,
+  createScheduledSend, getScheduledSends, getScheduledSendById, cancelScheduledSend, updateScheduledSendNextRun, updateScheduledSendDetails,
   DB_PATH,
 }

@@ -1,4 +1,5 @@
 <template>
+  <div class="drag-region" />
   <div class="app-container">
     <!-- Left Sidebar -->
     <div class="sidebar">
@@ -75,18 +76,43 @@
     </div>
 
     <div class="app-toast-stack">
-      <Toast
-        v-for="t in appToasts"
-        :key="t.id"
-        :visible="true"
-        :title="t.title"
-        :message="t.message"
-        :type="t.type"
-        :duration="t.duration"
-        :stacked="true"
-        @close="removeAppToast(t.id)"
-      />
+      <template v-if="collapsedModeActive">
+        <div class="collapsed-toast" @click="showNotificationsPanel = true">
+          <div class="toast-icon">ℹ</div>
+          <div class="toast-body">
+            <div class="toast-title">You have {{ notificationsLog.length }} notifications</div>
+            <div class="toast-message">Click to view all</div>
+          </div>
+          <button class="toast-close" @click.stop="clearAllToasts" title="Dismiss all">×</button>
+        </div>
+      </template>
+      <template v-else>
+        <Toast
+          v-for="t in appToasts"
+          :key="t.id"
+          :visible="true"
+          :title="t.title"
+          :message="t.message"
+          :type="t.type"
+          :duration="t.duration"
+          :stacked="true"
+          @close="removeAppToast(t.id)"
+        />
+      </template>
     </div>
+
+    <NotificationsPanel
+      v-if="showNotificationsPanel"
+      :toasts="notificationsLog"
+      @close="clearAllToasts"
+    />
+
+    <AttachmentErrorDialog
+      v-if="pendingAttachmentError"
+      :error="pendingAttachmentError"
+      @send-text="onSendTextOnly"
+      @dismiss="pendingAttachmentError = null"
+    />
 
     <!-- Create Group Dialog -->
     <CreateGroupDialog
@@ -119,7 +145,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, provide } from 'vue'
+
 import GroupsList from './components/GroupsList.vue'
 import GroupDetail from './components/GroupDetail.vue'
 import CreateGroupDialog from './components/CreateGroupDialog.vue'
@@ -127,6 +154,8 @@ import SendHistoryDashboard    from './components/SendHistoryDashboard.vue'
 import ScheduledSendsDashboard from './components/ScheduledSendsDashboard.vue'
 import ScheduledSyncModal from './components/ScheduledSyncModal.vue'
 import Toast from './components/Toast.vue'
+import NotificationsPanel from './components/NotificationsPanel.vue'
+import AttachmentErrorDialog from './components/AttachmentErrorDialog.vue'
 
 // ── Theme ──────────────────────────────────────────────────────────────────
 const isDark = ref(localStorage.getItem('theme') === 'dark')
@@ -152,13 +181,38 @@ const lastSyncTime = ref(null)
 const toast = ref({ message: '', type: 'success' })
 const scheduledRefreshKey = ref(0)
 const appToasts = ref([])
+const notificationsLog = ref([])
+const collapsedModeActive = ref(false)
+const showNotificationsPanel = ref(false)
+const pendingAttachmentError = ref(null)
 let   appToastSeq = 0
 function addAppToast(title, message = '', type = 'info', duration = 4000) {
   const id = ++appToastSeq
-  appToasts.value.push({ id, title, message, type, duration })
+  const entry = { id, title, message, type, duration }
+
+  if (collapsedModeActive.value) {
+    notificationsLog.value.push(entry)
+    return
+  }
+
+  appToasts.value.push(entry)
+
+  if (appToasts.value.length > 3) {
+    notificationsLog.value.push(...appToasts.value)
+    appToasts.value = []
+    collapsedModeActive.value = true
+  }
 }
 function removeAppToast(id) {
   appToasts.value = appToasts.value.filter(t => t.id !== id)
+}
+provide('addToast', addAppToast)
+
+function clearAllToasts() {
+  appToasts.value = []
+  notificationsLog.value = []
+  collapsedModeActive.value = false
+  showNotificationsPanel.value = false
 }
 
 const fdaBanner = ref(false)
@@ -416,6 +470,8 @@ onMounted(async () => {
     await loadGroups()
     scheduledRefreshKey.value++
 
+    if (result?.isError) return  // handled via attachment:errors channel
+
     if (result) {
       const noun = result.succeeded === 1 ? 'person' : 'people'
       const time = result.sentAt
@@ -437,7 +493,26 @@ onMounted(async () => {
       }
     }
   })
+
+  window.api.onAttachmentErrors((errors) => {
+    if (errors.length && !pendingAttachmentError.value) {
+      pendingAttachmentError.value = errors[0]
+    }
+  })
 })
+
+async function onSendTextOnly(scheduledSendId) {
+  try {
+    await window.api.sendTextOnly(scheduledSendId)
+    scheduledRefreshKey.value++
+    await loadGroups()
+    addAppToast('Message sent', 'Text sent successfully without the missing image.', 'success')
+  } catch (err) {
+    addAppToast('Send failed', err.message, 'error')
+  } finally {
+    pendingAttachmentError.value = null
+  }
+}
 </script>
 
 <style>
@@ -534,6 +609,16 @@ input:focus { border-color: var(--accent); }
 </style>
 
 <style scoped>
+.drag-region {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 20px;
+  -webkit-app-region: drag;
+  z-index: 0;
+}
+
 .app-container {
   display: flex;
   height: 100vh;
@@ -644,10 +729,62 @@ input:focus { border-color: var(--accent); }
   right: 24px;
   z-index: 10000;
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;
   gap: 10px;
   align-items: flex-end;
   pointer-events: none;
 }
 .app-toast-stack > * { pointer-events: all; }
+
+.collapsed-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  max-width: 380px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.collapsed-toast:hover { background: var(--bg); }
+
+.collapsed-toast .toast-icon {
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--accent);
+}
+.collapsed-toast .toast-body { flex: 1; min-width: 0; }
+.collapsed-toast .toast-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.4;
+}
+.collapsed-toast .toast-message {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 3px;
+}
+.collapsed-toast .toast-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-2);
+  font-size: 18px;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-top: -2px;
+}
+.collapsed-toast .toast-close:hover { color: var(--text); background: none; }
 </style>

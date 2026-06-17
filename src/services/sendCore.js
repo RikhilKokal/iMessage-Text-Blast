@@ -32,6 +32,7 @@ on run argv
   return "ok"
 end run`
 
+
 const SMS_SCRIPT = `\
 on run argv
   set msgText  to item 1 of argv
@@ -64,6 +65,7 @@ function normalisePhone(raw) {
 async function sendViaImessage(phone, message) {
   await execFileAsync('osascript', [IMESSAGE_SCRIPT_PATH, message, phone], { timeout: 15000 })
 }
+
 
 async function sendViaSms(phone, message) {
   await execFileAsync('osascript', [SMS_SCRIPT_PATH, message, phone], { timeout: 15000 })
@@ -147,6 +149,30 @@ async function pollDelivery(phone, beforeMs, chatDbQuery) {
   return { status: 'timeout' }
 }
 
+// ── Attachment sender ─────────────────────────────────────────────────────────
+
+async function sendAttachment(e164, attachmentPath, service = 'iMessage') {
+  if (!attachmentPath || !fs.existsSync(attachmentPath)) return
+  const ext     = path.extname(attachmentPath)
+  const picPath = path.join(os.homedir(), 'Pictures', `imsg_tmp_${Date.now()}${ext}`)
+  try {
+    fs.copyFileSync(attachmentPath, picPath)
+    const svcType = service === 'SMS' ? 'SMS' : 'iMessage'
+    const script  = `set theFile to POSIX file "${picPath}"
+tell application "Messages"
+  set targetService to 1st account whose service type = ${svcType}
+  set targetBuddy to participant "${e164}" of targetService
+  send theFile to targetBuddy
+end tell`
+    await execFileAsync('osascript', ['-e', script], { timeout: 30000 })
+    await sleep(5000)
+  } catch (fileErr) {
+    console.error(`[Send] Attachment failed for ${e164}: ${(fileErr.stderr || fileErr.message || '').trim()}`)
+  } finally {
+    try { fs.unlinkSync(picPath) } catch (_) {}
+  }
+}
+
 // ── Core send ─────────────────────────────────────────────────────────────────
 
 /**
@@ -156,42 +182,60 @@ async function pollDelivery(phone, beforeMs, chatDbQuery) {
  * @param {'iMessage'|'SMS'} preferredService
  * @param {Function} chatDbQuery
  */
-async function sendMessage(phone, message, preferredService = 'iMessage', chatDbQuery) {
+async function sendMessage(phone, message, preferredService = 'iMessage', chatDbQuery, attachmentPaths = null) {
   const e164 = normalisePhone(phone)
   if (!e164) return { success: false, phone, error: 'Invalid phone number' }
 
+  const paths = Array.isArray(attachmentPaths) ? attachmentPaths.filter(Boolean) : (attachmentPaths ? [attachmentPaths] : [])
+
+  const hasText = message && message.trim().length > 0
+
   if (preferredService === 'SMS') {
     try {
-      await sendViaSms(e164, message)
+      if (hasText) await sendViaSms(e164, message)
+      for (const p of paths) await sendAttachment(e164, p, 'SMS')
       return { success: true, phone: e164, via: 'SMS' }
     } catch (err) {
       return { success: false, phone: e164, error: smsError(err) }
     }
   }
 
-  const beforeMs = Date.now()
+  if (hasText) {
+    const beforeMs = Date.now()
+
+    try {
+      await sendViaImessage(e164, message)
+    } catch (err) {
+      return { success: false, phone: e164, error: (err.stderr || err.message || '').trim() }
+    }
+
+    const result = await pollDelivery(e164, beforeMs, chatDbQuery)
+
+    if (result.fdaMissing || result.status === 'delivered' || result.status === 'timeout') {
+      for (const p of paths) await sendAttachment(e164, p, 'iMessage')
+      return { success: true, phone: e164, via: 'iMessage', unconfirmed: result.status === 'timeout' || result.fdaMissing }
+    }
+
+    console.log(`[Send] ${e164}: iMessage failed (error ${result.error}), retrying via SMS…`)
+    try {
+      await sendViaSms(e164, message)
+      for (const p of paths) await sendAttachment(e164, p, 'SMS')
+      return { success: true, phone: e164, via: 'SMS', autoRouted: true }
+    } catch (smsErr) {
+      return {
+        success: false,
+        phone: e164,
+        error: `iMessage failed and SMS unavailable. Enable Text Message Forwarding on your iPhone. (${smsError(smsErr)})`,
+      }
+    }
+  }
+
+  // Attachment-only send
   try {
-    await sendViaImessage(e164, message)
+    for (const p of paths) await sendAttachment(e164, p, 'iMessage')
+    return { success: true, phone: e164, via: 'iMessage' }
   } catch (err) {
     return { success: false, phone: e164, error: (err.stderr || err.message || '').trim() }
-  }
-
-  const result = await pollDelivery(e164, beforeMs, chatDbQuery)
-
-  if (result.fdaMissing || result.status === 'delivered' || result.status === 'timeout') {
-    return { success: true, phone: e164, via: 'iMessage', unconfirmed: result.status === 'timeout' || result.fdaMissing }
-  }
-
-  console.log(`[Send] ${e164}: iMessage failed (error ${result.error}), retrying via SMS…`)
-  try {
-    await sendViaSms(e164, message)
-    return { success: true, phone: e164, via: 'SMS', autoRouted: true }
-  } catch (smsErr) {
-    return {
-      success: false,
-      phone: e164,
-      error: `iMessage failed and SMS unavailable. Enable Text Message Forwarding on your iPhone. (${smsError(smsErr)})`,
-    }
   }
 }
 
@@ -210,47 +254,26 @@ function renderTemplate(template, contact) {
     .replace(/\{\{nickname\}\}/g,  contact.nickname || firstName)
 }
 
-// ── Messages.app helpers ──────────────────────────────────────────────────────
-
-async function isMessagesRunning() {
-  try {
-    const { stdout } = await execFileAsync('osascript', [
-      '-e', 'tell application "System Events" to return (name of processes) contains "Messages"',
-    ], { timeout: 5000 })
-    return stdout.trim() === 'true'
-  } catch { return false }
-}
-
-async function openMessages() {
-  await execFileAsync('osascript', ['-e', 'tell application "Messages" to launch'], { timeout: 8000 })
-  await sleep(1500)
-}
-
 // ── Bulk send ─────────────────────────────────────────────────────────────────
 
 /**
  * Send a templated message to a list of members.
  *
- * @param {Array}    members         — each has { id, name, phone, email, company, nickname, service }
+ * @param {Array}    members     — each has { id, name, phone, email, company, nickname, service }
  * @param {string}   templateText
- * @param {Function} chatDbQuery     — injected DB access for delivery polling
+ * @param {Function} chatDbQuery — injected DB access for delivery polling
  * @param {object}   [opts]
- * @param {Function} [opts.onProgress]   — callback({ sent, failed, total, name, via })
+ * @param {Function} [opts.onProgress] — callback({ sent, failed, total, name, via })
  */
-async function sendToGroup(members, templateText, chatDbQuery, { onProgress } = {}) {
-  if (!(await isMessagesRunning())) {
-    console.log('[Send] Opening Messages.app…')
-    await openMessages()
-  }
-
+async function sendToGroup(members, templateText, chatDbQuery, { onProgress, attachmentPath } = {}) {
   const succeeded = []
   const failed    = []
   const total     = members.length
 
   for (const member of members) {
-    const message  = renderTemplate(templateText, member)
-    const service  = member.service === 'SMS' ? 'SMS' : 'iMessage'
-    const result   = await sendMessage(member.phone, message, service, chatDbQuery)
+    const message = renderTemplate(templateText, member)
+    const service = member.service === 'SMS' ? 'SMS' : 'iMessage'
+    const result  = await sendMessage(member.phone, message, service, chatDbQuery, attachmentPath)
 
     if (result.success) {
       succeeded.push({ ...member, via: result.via, autoRouted: result.autoRouted })
@@ -286,7 +309,7 @@ function escapeSql(s) { return (s ?? '').toString().replace(/'/g, "''") }
  * @param {Array}    opts.allMembers   — full group (selected + unselected) for total_members_at_send
  * @param {Array}    opts.sentMembers  — members actually attempted (may be a subset of allMembers)
  */
-function buildSendHistorySQL({ groupId, templateText, succeeded, failed, allMembers, sentMembers }) {
+function buildSendHistorySQL({ groupId, templateText, succeeded, failed, allMembers, sentMembers, attachmentPath }) {
   const sentIds   = new Set(succeeded.map(s => String(s.id)))
   const status    = failed.length === 0 ? 'sent' : succeeded.length > 0 ? 'partial' : 'failed'
   const sentAt    = new Date().toISOString()
@@ -306,11 +329,14 @@ function buildSendHistorySQL({ groupId, templateText, succeeded, failed, allMemb
     }
   }
 
+  const attachArr = Array.isArray(attachmentPath) ? attachmentPath.filter(Boolean) : (attachmentPath ? [attachmentPath] : [])
+  const attachSql = attachArr.length ? `'${escapeSql(JSON.stringify(attachArr))}'` : 'NULL'
+
   return `
-INSERT INTO send_history (group_id, template_text, status, error_log, total_members_at_send, created_at, sent_at)
-VALUES (${groupId}, '${escapeSql(templateText)}', '${status}', ${errorSql}, ${allMembers.length}, CURRENT_TIMESTAMP, '${sentAt}');
+INSERT INTO send_history (group_id, template_text, status, error_log, total_members_at_send, attachment_path, created_at, sent_at)
+VALUES (${groupId}, '${escapeSql(templateText)}', '${status}', ${errorSql}, ${allMembers.length}, ${attachSql}, CURRENT_TIMESTAMP, '${sentAt}');
 INSERT INTO send_history_recipients (send_history_id, name, phone, received) VALUES
   ${rows.join(',\n  ')};`
 }
 
-module.exports = { sendToGroup, sendMessage, renderTemplate, normalisePhone, isMessagesRunning, openMessages, buildSendHistorySQL }
+module.exports = { sendToGroup, sendMessage, renderTemplate, normalisePhone, buildSendHistorySQL }

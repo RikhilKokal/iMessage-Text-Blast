@@ -6,9 +6,6 @@ const core = require('./sendCore')
 
 const CHAT_DB_PATH = path.join(os.homedir(), 'Library', 'Messages', 'chat.db')
 
-// Provide a chatDbQuery function using better-sqlite3.
-// Opens and closes a read-only connection per call so the DB handle
-// is never held across the async poll loop (avoids locking issues).
 function chatDbQuery(sql) {
   const db = new Database(CHAT_DB_PATH, { readonly: true, fileMustExist: true })
   try {
@@ -18,15 +15,8 @@ function chatDbQuery(sql) {
   }
 }
 
-/**
- * Send a templated message to every member.
- * @param {Array}    members
- * @param {string}   templateText
- * @param {Function} [onProgress]  callback({ sent, failed, total, name, via })
- */
-async function sendToGroup(members, templateText, onProgress = null) {
-  // Remap member.service → member fields expected by sendCore (uses member.service)
-  return core.sendToGroup(members, templateText, chatDbQuery, { onProgress })
+async function sendToGroup(members, templateText, onProgress = null, attachmentPath = null) {
+  return core.sendToGroup(members, templateText, chatDbQuery, { onProgress, attachmentPath })
 }
 
 async function sendMessage(phone, message, preferredService = 'iMessage') {
@@ -36,8 +26,6 @@ async function sendMessage(phone, message, preferredService = 'iMessage') {
 module.exports = {
   sendToGroup,
   sendMessage,
-  renderTemplate:     core.renderTemplate,
-  normalisePhone:     core.normalisePhone,
-  isMessagesRunning:  core.isMessagesRunning,
-  openMessages:       core.openMessages,
+  renderTemplate: core.renderTemplate,
+  normalisePhone: core.normalisePhone,
 }

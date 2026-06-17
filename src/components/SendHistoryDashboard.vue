@@ -45,6 +45,14 @@
             >
               {{ recipientLabel(send) }}
             </div>
+            <div
+              v-if="parseAttachments(send.attachment_path).length > 0"
+              class="attachments-line"
+              :class="{ clickable: attachmentLineTruncated(send.attachment_path) }"
+              @click="attachmentLineTruncated(send.attachment_path) && openAttachments(send.attachment_path)"
+            >
+              📎 {{ attachmentLineText(send.attachment_path) }}
+            </div>
             <div v-if="send.error_log" class="error-log">{{ send.error_log }}</div>
           </div>
         </div>
@@ -85,6 +93,23 @@
       </div>
     </div>
 
+    <!-- Attachments popup -->
+    <div v-if="attachmentsPopup" class="confirm-overlay" @click.self="attachmentsPopup = null">
+      <div class="confirm-box recipients-box">
+        <p class="recipients-title">Attachments</p>
+        <div class="recipients-section">
+          <div class="recipients-list">
+            <div v-for="name in attachmentsPopup" :key="name" class="recipient-row">
+              <span class="recipient-name">📎 {{ name }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="confirm-actions">
+          <button @click="attachmentsPopup = null">Close</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Clear history confirm -->
     <div v-if="confirmClear" class="confirm-overlay">
       <div class="confirm-box">
@@ -106,7 +131,25 @@ defineEmits(['close'])
 const searchQuery = ref('')
 const sendHistory = ref([])
 const confirmClear = ref(false)
-const recipientsPopup = ref(null)
+const recipientsPopup  = ref(null)
+const attachmentsPopup = ref(null)
+
+const ATTACHMENT_LINE_MAX = 60
+
+function attachmentLineText(raw) {
+  const names = parseAttachments(raw).map(p => p.split('/').pop())
+  const full = names.join(', ')
+  return full.length <= ATTACHMENT_LINE_MAX ? full : full.slice(0, ATTACHMENT_LINE_MAX).replace(/,?\s*\S*$/, '') + '…'
+}
+
+function attachmentLineTruncated(raw) {
+  const names = parseAttachments(raw).map(p => p.split('/').pop())
+  return names.join(', ').length > ATTACHMENT_LINE_MAX
+}
+
+function openAttachments(raw) {
+  attachmentsPopup.value = parseAttachments(raw).map(p => p.split('/').pop())
+}
 
 async function load() {
   try {
@@ -146,6 +189,11 @@ const filteredHistory = computed(() => {
     (s.group_name || '').toLowerCase().includes(q)
   )
 })
+
+function parseAttachments(raw) {
+  if (!raw) return []
+  try { return JSON.parse(raw) } catch { return [raw] }
+}
 
 function truncate(text, len = 100) {
   if (!text) return ''
@@ -302,6 +350,22 @@ function statusLabel(status) {
 
 .preview { font-size: 12px; color: var(--text-2); font-style: italic; line-height: 1.4; }
 .meta    { font-size: 11px; color: var(--text-2); }
+
+.attachments-line {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attachments-line.clickable {
+  cursor: pointer;
+}
+.attachments-line.clickable:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
 
 .error-log {
   font-size: 11px;

@@ -106,7 +106,19 @@
         <div v-else class="preview-placeholder">
           {{ !template.trim() ? 'Type a message above to see a live preview.' : 'Add members to see a preview.' }}
         </div>
+
       </section>
+
+      <!-- ── Attachment ── -->
+      <div class="attachment-row">
+        <button v-if="attachmentPaths.length < MAX_ATTACHMENTS" class="btn-attach" @click="pickAttachment" title="Attach files (max 8)">📎 Attach File</button>
+        <div class="attachment-chips">
+          <div v-for="(p, i) in attachmentPaths" :key="p" class="attachment-chip">
+            <span class="attachment-name">{{ p.split('/').pop() }}</span>
+            <button class="attachment-remove" @click="removeAttachment(i)" title="Remove">×</button>
+          </div>
+        </div>
+      </div>
 
       <!-- ── Send ── -->
       <section class="send-bar">
@@ -165,25 +177,11 @@
       </div>
     </div>
 
-    <div class="toast-stack">
-      <Toast
-        v-for="t in toasts"
-        :key="t.id"
-        :visible="true"
-        :title="t.title"
-        :message="t.message"
-        :type="t.type"
-        :duration="t.duration"
-        :stacked="true"
-        @close="removeToast(t.id)"
-      />
-    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
-import Toast from './Toast.vue'
+import { ref, computed, watch, nextTick, inject } from 'vue'
 import AddMemberModal      from './AddMemberModal.vue'
 import DeleteConfirmDialog from './DeleteConfirmDialog.vue'
 import MessagePreview      from './MessagePreview.vue'
@@ -221,13 +219,31 @@ const showScheduleModal = ref(false)
 const template          = ref('')
 const selectedMemberIds = ref(new Set())
 const knownMemberIds    = ref(new Set())
-const isSending    = ref(false)
-const sendProgress = ref(null)
+const isSending          = ref(false)
+const sendProgress       = ref(null)
+const MAX_ATTACHMENTS    = 8
+const attachmentPaths    = ref([])
+
+async function pickAttachment() {
+  const remaining = MAX_ATTACHMENTS - attachmentPaths.value.length
+  if (remaining <= 0) return
+  const filePaths = await window.api.openAttachmentDialog(MAX_ATTACHMENTS)
+  if (!filePaths?.length) return
+  const combined = [...attachmentPaths.value, ...filePaths]
+  if (combined.length > MAX_ATTACHMENTS) {
+    showToast(`Max ${MAX_ATTACHMENTS} files`, `Only the first ${MAX_ATTACHMENTS} selected files were added.`, 'error', 4000)
+  }
+  attachmentPaths.value = combined.slice(0, MAX_ATTACHMENTS)
+}
+
+function removeAttachment(index) {
+  attachmentPaths.value = attachmentPaths.value.filter((_, i) => i !== index)
+}
 
 // ── Computed ───────────────────────────────────────────────────────────────
 const selectedMembers = computed(() => props.members.filter(m => selectedMemberIds.value.has(m.id)))
 const allSelected     = computed(() => props.members.length > 0 && props.members.every(m => selectedMemberIds.value.has(m.id)))
-const canSend         = computed(() => template.value.trim().length > 0 && selectedMembers.value.length > 0)
+const canSend         = computed(() => (template.value.trim().length > 0 || attachmentPaths.value.length > 0) && selectedMembers.value.length > 0)
 
 function toggleMember(id) {
   const s = new Set(selectedMemberIds.value)
@@ -351,15 +367,7 @@ function confirmDelete() {
 }
 
 // ── Toast helpers ──────────────────────────────────────────────────────────
-const toasts   = ref([])
-let   toastSeq = 0
-function showToast(title, message = '', type = 'info', duration = 4000) {
-  const id = ++toastSeq
-  toasts.value.push({ id, title, message, type, duration })
-}
-function removeToast(id) {
-  toasts.value = toasts.value.filter(t => t.id !== id)
-}
+const showToast = inject('addToast')
 
 
 // ── Unknown warning ────────────────────────────────────────────────────────
@@ -384,7 +392,7 @@ async function sendNow() {
   })
 
   try {
-    const result = await window.api.sendToGroup(props.group.id, template.value, [...selectedMemberIds.value])
+    const result = await window.api.sendToGroup(props.group.id, template.value, [...selectedMemberIds.value], [...attachmentPaths.value])
 
     // Reload member badges if any contacts were auto-switched to SMS
     if (result.autoRouted?.length) {
@@ -394,6 +402,7 @@ async function sendNow() {
     // Send summary
     if (result.failed === 0) {
       template.value = ''
+      attachmentPaths.value = []
       showToast(
         `Sent to ${result.succeeded} ${result.succeeded === 1 ? 'person' : 'people'}`,
         '', 'success'
@@ -437,9 +446,11 @@ async function handleSchedule(info) {
       info.type,
       scheduleData,
       [...selectedMemberIds.value],
+      [...attachmentPaths.value],
     )
     showScheduleModal.value = false
     template.value = ''
+    attachmentPaths.value = []
     showToast(
       'Scheduled',
       `Message scheduled for ${new Date(result.nextRun).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`,
@@ -724,6 +735,7 @@ async function handleSchedule(info) {
   font-style: italic;
 }
 
+
 /* ── Toast stack ─────────────────────────────────────────────────────────── */
 
 /* ── Send bar ────────────────────────────────────────────────────────────── */
@@ -748,18 +760,6 @@ async function handleSchedule(info) {
 .send-actions { display: flex; gap: 8px; }
 .send-actions button { padding: 7px 18px; }
 
-.toast-stack {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 10000;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  align-items: flex-end;
-  pointer-events: none;
-}
-.toast-stack > * { pointer-events: all; }
 
 .modal-overlay {
   position: fixed;
@@ -792,4 +792,65 @@ async function handleSchedule(info) {
   margin-top: 4px;
 }
 .unknown-warning-actions button { padding: 8px 18px; }
+
+.attachment-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: -16px;
+  flex-wrap: wrap;
+}
+
+.attachment-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.btn-attach {
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: border-color 0.15s, color 0.15s;
+}
+.btn-attach:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.attachment-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-soft, rgba(99,102,241,0.12));
+  border: 1px solid var(--accent);
+  border-radius: 20px;
+  padding: 3px 10px 3px 12px;
+  font-size: 12px;
+  color: var(--accent);
+  max-width: 260px;
+}
+
+.attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.attachment-remove:hover { opacity: 1; }
 </style>

@@ -30,12 +30,8 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted } from 'vue'
 defineProps({ toasts: { type: Array, required: true } })
-const emit = defineEmits(['close'])
-function onKeydown(e) { if (e.key === 'Escape') emit('close') }
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onUnmounted(() => window.removeEventListener('keydown', onKeydown))
+defineEmits(['close'])
 </script>
 
 <style scoped>

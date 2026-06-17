@@ -57,10 +57,12 @@
         <span class="time-label">Hours</span>
         <input
           class="time-input"
+          :class="{ 'time-input-error': hourError }"
           type="text"
-          :value="displayHour"
-          @input="e => setHour(e.target.value)"
-          @focus="e => e.target.select()"
+          :value="hourFocused ? draftHour : displayHour"
+          @focus="e => { hourFocused = true; draftHour = ''; hourError = false; e.target.select() }"
+          @keydown="onHourKeydown"
+          @blur="commitHour"
           maxlength="2"
         />
       </div>
@@ -69,10 +71,12 @@
         <span class="time-label">Minutes</span>
         <input
           class="time-input"
+          :class="{ 'time-input-error': minuteError }"
           type="text"
-          :value="pad(minute)"
-          @input="e => setMinute(e.target.value)"
-          @focus="e => e.target.select()"
+          :value="minuteFocused ? draftMinute : pad(minute)"
+          @focus="e => { minuteFocused = true; draftMinute = ''; minuteError = false; e.target.select() }"
+          @keydown="onMinuteKeydown"
+          @blur="commitMinute"
           maxlength="2"
         />
       </div>
@@ -91,7 +95,7 @@ import { ref, computed, watch } from 'vue'
 const props = defineProps({
   modelValue: { type: String, default: '' },
 })
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'update:timeValid'])
 
 const MONTHS = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December']
@@ -178,14 +182,94 @@ function selectDay(day, year, month) {
 const displayHour = computed(() => pad(hour12.value))
 function pad(n) { return String(n).padStart(2, '0') }
 
-function setHour(val) {
-  const n = parseInt(val)
-  if (!isNaN(n) && n >= 1 && n <= 12) { hour12.value = n; emitValue() }
+const hourFocused   = ref(false)
+const minuteFocused = ref(false)
+const draftHour     = ref('')
+const draftMinute   = ref('')
+const hourError     = ref(false)
+const minuteError   = ref(false)
+
+function emitTimeValid() {
+  emit('update:timeValid', !hourError.value && !minuteError.value)
 }
-function setMinute(val) {
-  const n = parseInt(val)
-  if (!isNaN(n) && n >= 0 && n <= 59) { minute.value = n; emitValue() }
+
+const NAV_KEYS = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter']
+
+function onHourKeydown(e) {
+  if (e.key === 'Backspace') { e.preventDefault(); draftHour.value = draftHour.value.slice(0, -1); hourError.value = false; return }
+  if (NAV_KEYS.includes(e.key)) return
+  if (!/^\d$/.test(e.key)) { e.preventDefault(); return }
+  e.preventDefault()
+
+  const d = draftHour.value
+  const k = e.key
+
+  if (d === '') {
+    if (k === '1') {
+      // Could be 1, 10, 11, 12 — wait for second digit
+      draftHour.value = '1'
+    } else {
+      // 2–9: auto-complete to 02–09 immediately
+      const n = parseInt(k)
+      hour12.value = n; draftHour.value = pad(n); hourError.value = false; emitValue()
+    }
+  } else if (d === '1') {
+    // Second digit after 1: only 0, 1, 2 allowed
+    if (['0', '1', '2'].includes(k)) {
+      const n = parseInt('1' + k)
+      hour12.value = n; draftHour.value = String(n); hourError.value = false; emitValue()
+    }
+    // any other digit: silently reject
+  }
 }
+
+function commitHour() {
+  hourFocused.value = false
+  // If they typed just '1' and blurred, accept as hour 1
+  if (draftHour.value === '1') {
+    hour12.value = 1; draftHour.value = '01'; hourError.value = false; emitValue()
+  }
+  emitTimeValid()
+}
+
+function onMinuteKeydown(e) {
+  if (e.key === 'Backspace') { e.preventDefault(); draftMinute.value = draftMinute.value.slice(0, -1); minuteError.value = false; return }
+  if (NAV_KEYS.includes(e.key)) return
+  if (!/^\d$/.test(e.key)) { e.preventDefault(); return }
+  e.preventDefault()
+
+  const d = draftMinute.value
+  const k = e.key
+
+  if (d === '') {
+    const n = parseInt(k)
+    if (n >= 6) {
+      // 6–9: auto-complete to 06–09 immediately
+      minute.value = n; draftMinute.value = pad(n); minuteError.value = false; emitValue()
+    } else {
+      // 0–5: wait for second digit
+      draftMinute.value = k
+    }
+  } else if (d.length === 1) {
+    // Second digit
+    const n = parseInt(d + k)
+    if (n >= 0 && n <= 59) {
+      minute.value = n; draftMinute.value = pad(n); minuteError.value = false; emitValue()
+    }
+    // out of range: silently reject
+  }
+}
+
+function commitMinute() {
+  minuteFocused.value = false
+  // If they typed a single digit 0–5 and blurred, auto-complete (e.g. '5' → 05)
+  if (draftMinute.value.length === 1) {
+    const n = parseInt(draftMinute.value)
+    minute.value = n; draftMinute.value = pad(n); minuteError.value = false; emitValue()
+  }
+  emitTimeValid()
+}
+
 function setSecond(val) {
   const n = parseInt(val)
   if (!isNaN(n) && n >= 0 && n <= 59) { second.value = n; emitValue() }
@@ -322,10 +406,6 @@ function emitValue() {
 .day-btn:hover:not(:disabled):not(.selected) {
   background: var(--bg);
 }
-.day-btn.today:not(.selected) {
-  font-weight: 700;
-  color: var(--accent);
-}
 .day-btn.selected {
   background: var(--text);
   color: var(--surface);
@@ -378,6 +458,14 @@ function emitValue() {
   transition: border-color 0.12s;
 }
 .time-input:focus { border-color: var(--accent); }
+.time-input-error { border-color: var(--error) !important; }
+
+.time-error {
+  padding: 6px 16px 10px;
+  font-size: 12px;
+  color: var(--error);
+  background: var(--bg);
+}
 
 .time-sep {
   font-size: 15px;

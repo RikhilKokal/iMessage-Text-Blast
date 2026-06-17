@@ -1,7 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
-// Expose a safe, typed API to the renderer process.
-// All IPC channels are explicitly allowlisted here.
 contextBridge.exposeInMainWorld('api', {
   // ── Contacts ──────────────────────────────────────────────
   diagnoseContacts: () =>
@@ -62,8 +60,8 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('contacts:checkCapability', members),
 
   // ── Send ──────────────────────────────────────────────────
-  sendToGroup: (groupId, templateText, memberIds) =>
-    ipcRenderer.invoke('send:toGroup', groupId, templateText, memberIds),
+  sendToGroup: (groupId, templateText, memberIds, attachmentPath) =>
+    ipcRenderer.invoke('send:toGroup', groupId, templateText, memberIds, attachmentPath),
 
   onSendProgress: (callback) =>
     ipcRenderer.on('send:progress', (_event, data) => callback(data)),
@@ -83,15 +81,17 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('db:getSendRecipients', sendHistoryId),
 
   // ── Scheduling ────────────────────────────────────────────
-  createScheduledSend: (groupId, templateText, scheduleType, scheduleData, memberIds) =>
-    ipcRenderer.invoke('scheduling:createScheduledSend', groupId, templateText, scheduleType, scheduleData, memberIds),
+  openAttachmentDialog: (maxFiles) =>
+    ipcRenderer.invoke('dialog:openAttachment', maxFiles),
 
-  // id = DB row id, plistId = launchd_plist_id string
+  createScheduledSend: (groupId, templateText, scheduleType, scheduleData, memberIds, attachmentPath) =>
+    ipcRenderer.invoke('scheduling:createScheduledSend', groupId, templateText, scheduleType, scheduleData, memberIds, attachmentPath),
+
   cancelScheduledSend: (id, plistId) =>
     ipcRenderer.invoke('scheduling:cancelScheduledSend', id, plistId),
 
-  updateScheduledSend: (id, plistId, templateText, scheduleType, scheduleData, memberIds) =>
-    ipcRenderer.invoke('scheduling:updateScheduledSend', id, plistId, templateText, scheduleType, scheduleData, memberIds),
+  updateScheduledSend: (id, plistId, templateText, scheduleType, scheduleData, memberIds, attachmentPath) =>
+    ipcRenderer.invoke('scheduling:updateScheduledSend', id, plistId, templateText, scheduleType, scheduleData, memberIds, attachmentPath),
 
   getScheduledSends: (groupId) =>
     ipcRenderer.invoke('db:getScheduledSends', groupId),
@@ -104,4 +104,10 @@ contextBridge.exposeInMainWorld('api', {
 
   onDbExternalChange: (cb) =>
     ipcRenderer.on('db:external-change', cb),
+
+  sendTextOnly: (scheduledSendId) =>
+    ipcRenderer.invoke('scheduling:sendTextOnly', scheduledSendId),
+
+  onAttachmentErrors: (cb) =>
+    ipcRenderer.on('attachment:errors', (_e, errors) => cb(errors)),
 })

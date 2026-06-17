@@ -80,6 +80,15 @@
                 v-text="v.label"
               ></button>
             </div>
+            <div class="attachment-row">
+              <button v-if="editAttachmentPaths.length < MAX_ATTACHMENTS" class="btn-attach" @click="pickEditAttachment" title="Attach files (max 8)">📎 Attach File</button>
+              <div class="attachment-chips">
+                <div v-for="(p, i) in editAttachmentPaths" :key="p" class="attachment-chip">
+                  <span class="attachment-name">{{ p.split('/').pop() }}</span>
+                  <button class="attachment-remove" @click="removeEditAttachment(i)" title="Remove">×</button>
+                </div>
+              </div>
+            </div>
             <MessagePreview
               v-if="editTemplate.trim() && editPreviewMembers.length > 0"
               :template="editTemplate"
@@ -141,7 +150,7 @@
             </div>
 
             <div v-if="editType === 'once'" style="margin-top: 12px;">
-              <DateTimePicker v-model="editDateTime" />
+              <DateTimePicker v-model="editDateTime" @update:timeValid="v => editTimeValid = v" />
               <p v-if="editIsPast" class="error-msg" style="margin-top: 6px;">Please choose a time in the future.</p>
             </div>
 
@@ -350,9 +359,27 @@ const VARIABLES = [
 const TOKEN_LABELS = Object.fromEntries(VARIABLES.map(v => [v.key, v.label]))
 
 // ── Edit ──────────────────────────────────────────────────────────────────────
-const editing          = ref(null)
-const editTokenEditorEl = ref(null)
-const editTemplate     = ref('')
+const editing              = ref(null)
+const editTokenEditorEl    = ref(null)
+const editTemplate         = ref('')
+const MAX_ATTACHMENTS      = 8
+const editAttachmentPaths  = ref([])
+
+async function pickEditAttachment() {
+  const remaining = MAX_ATTACHMENTS - editAttachmentPaths.value.length
+  if (remaining <= 0) return
+  const filePaths = await window.api.openAttachmentDialog(MAX_ATTACHMENTS)
+  if (!filePaths?.length) return
+  const combined = [...editAttachmentPaths.value, ...filePaths]
+  if (combined.length > MAX_ATTACHMENTS) {
+    alert(`Max ${MAX_ATTACHMENTS} files — only the first ${MAX_ATTACHMENTS} selected files were added.`)
+  }
+  editAttachmentPaths.value = combined.slice(0, MAX_ATTACHMENTS)
+}
+
+function removeEditAttachment(index) {
+  editAttachmentPaths.value = editAttachmentPaths.value.filter((_, i) => i !== index)
+}
 const editType         = ref('once')
 const editDateTime     = ref('')
 const editInterval     = ref('daily')
@@ -398,23 +425,27 @@ function toggleAllRecipients() {
   }
 }
 
+const editTimeValid = ref(true)
 const editIsPast = computed(() =>
   editType.value === 'once' && !!editDateTime.value && new Date(editDateTime.value) <= new Date()
 )
 const editIsValid = computed(() => {
-  if (!editTemplate.value.trim()) return false
+  if (!editTemplate.value.trim() && editAttachmentPaths.value.length === 0) return false
   if (editSelectedIds.value.size === 0) return false
-  if (editType.value === 'once') return !!editDateTime.value && !editIsPast.value
+  if (editType.value === 'once') return !!editDateTime.value && !editIsPast.value && editTimeValid.value
   return true
 })
 
 async function startEdit(send) {
-  editing.value          = send
-  expandMessage.value    = false
-  expandSchedule.value   = false
-  expandRecipients.value = false
-  editTemplate.value     = send.template_text || ''
-  editType.value         = send.schedule_type || 'once'
+  editing.value            = send
+  expandMessage.value      = false
+  expandSchedule.value     = false
+  expandRecipients.value   = false
+  editTemplate.value       = send.template_text || ''
+  try {
+    editAttachmentPaths.value = send.attachment_path ? JSON.parse(send.attachment_path) : []
+  } catch { editAttachmentPaths.value = send.attachment_path ? [send.attachment_path] : [] }
+  editType.value           = send.schedule_type || 'once'
   editGroupMembers.value = []
   editSelectedIds.value  = new Set()
 
@@ -475,6 +506,7 @@ async function saveEdit() {
       editType.value,
       scheduleData,
       memberIds,
+      [...editAttachmentPaths.value],
     )
     await load(false)
   } catch (err) {
@@ -515,7 +547,7 @@ function fmtDate(ts) {
   try {
     const normalized = typeof ts === 'string' && !ts.endsWith('Z') ? ts + 'Z' : ts
     return new Date(normalized).toLocaleString(undefined, {
-      year: 'numeric', month: 'short', day: 'numeric',
+      weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
       hour: 'numeric', minute: '2-digit',
     })
   } catch { return ts }
@@ -930,6 +962,7 @@ function parsedInterval(raw) {
 .rp-name { font-weight: 500; }
 .rp-phone { font-size: 11px; color: var(--text-2); }
 
+
 .var-picker {
   display: flex;
   align-items: center;
@@ -960,4 +993,66 @@ function parsedInterval(raw) {
   text-align: center;
   font-style: italic;
 }
+
+.attachment-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 8px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.attachment-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.btn-attach {
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: border-color 0.15s, color 0.15s;
+}
+.btn-attach:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.attachment-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-soft, rgba(99,102,241,0.12));
+  border: 1px solid var(--accent);
+  border-radius: 20px;
+  padding: 3px 10px 3px 12px;
+  font-size: 12px;
+  color: var(--accent);
+  max-width: 240px;
+}
+
+.attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.attachment-remove:hover { opacity: 1; }
 </style>

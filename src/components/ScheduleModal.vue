@@ -20,7 +20,7 @@
 
       <!-- One-time: date + time -->
       <div v-if="scheduleType === 'once'" class="field">
-        <DateTimePicker v-model="scheduledDateTime" />
+        <DateTimePicker v-model="scheduledDateTime" @update:timeValid="v => timeValid = v" />
       </div>
 
       <!-- Recurring: interval + optional day + time of day -->
@@ -74,6 +74,7 @@ import DateTimePicker from './DateTimePicker.vue'
 const emit = defineEmits(['schedule', 'close'])
 
 const scheduleType      = ref('once')
+const timeValid         = ref(true)
 const scheduledDateTime = ref('')
 const recurringInterval = ref('daily')
 const scheduledTime     = ref('09:00')
@@ -94,7 +95,7 @@ const isPast = computed(() =>
 
 const isValid = computed(() => {
   if (scheduleType.value === 'recurring') return true
-  return !!scheduledDateTime.value && !isPast.value
+  return !!scheduledDateTime.value && !isPast.value && timeValid.value
 })
 
 function submit() {

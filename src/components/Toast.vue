@@ -16,7 +16,7 @@
 </template>
 
 <script setup>
-import { watch, onMounted } from 'vue'
+import { watch, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps({
   visible:   { type: Boolean, default: false },
@@ -28,18 +28,46 @@ const props = defineProps({
 })
 const emit = defineEmits(['close'])
 
-let timer = null
+let interval   = null
+let remaining  = 0
+const TICK     = 100
+
+function isVisible() {
+  return !document.hidden && document.hasFocus()
+}
+
+function startCountdown() {
+  clearInterval(interval)
+  if (!props.visible || props.duration <= 0) return
+  remaining = props.duration
+  interval = setInterval(() => {
+    if (isVisible()) {
+      remaining -= TICK
+      if (remaining <= 0) {
+        clearInterval(interval)
+        emit('close')
+      }
+    }
+  }, TICK)
+}
+
+function stopCountdown() {
+  clearInterval(interval)
+  interval = null
+}
+
 watch(() => props.visible, (v) => {
-  clearTimeout(timer)
-  if (v && props.duration > 0) {
-    timer = setTimeout(() => emit('close'), props.duration)
-  }
+  if (v) startCountdown()
+  else stopCountdown()
 })
+
 onMounted(() => {
-  if (props.visible && props.duration > 0) {
-    timer = setTimeout(() => emit('close'), props.duration)
-  }
+  if (props.visible) startCountdown()
+  window.addEventListener('focus', () => { /* interval already ticking, isVisible() now true */ })
+  window.addEventListener('blur',  () => { /* interval keeps ticking but isVisible() returns false */ })
 })
+
+onUnmounted(stopCountdown)
 </script>
 
 <style scoped>

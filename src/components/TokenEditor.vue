@@ -149,6 +149,7 @@ function onMouseDown(e) {
 }
 
 function onMouseMove(e) {
+  if (!e || !_selectionStart) return
   // Only mark as moved if mouse traveled more than 5 pixels
   const dx = e.clientX - _selectionStart.clientX
   const dy = e.clientY - _selectionStart.clientY

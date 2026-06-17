@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, Notification } = require('electron')
 const path = require('path')
 const fs   = require('fs')
 const os   = require('os')
@@ -191,7 +191,7 @@ ipcMain.handle('contacts:checkCapability', async (_event, members) => checkCapab
 
 // ── Send ──────────────────────────────────────────────────────────────────────
 
-ipcMain.handle('send:toGroup', async (event, groupId, templateText, memberIds) => {
+ipcMain.handle('send:toGroup', async (event, groupId, templateText, memberIds, attachmentPath) => {
   // Fetch members fresh from DB, optionally filtered to a subset
   const allMembers = db.getGroupMembers(groupId)
   let members = allMembers
@@ -202,7 +202,7 @@ ipcMain.handle('send:toGroup', async (event, groupId, templateText, memberIds) =
   if (!members.length) return { succeeded: 0, failed: 0, errors: [] }
 
   // Log a pending attempt before sending, then snapshot the recipient list
-  const { id: historyId } = db.logSendAttempt(groupId, templateText, 'pending', null, allMembers.length)
+  const { id: historyId } = db.logSendAttempt(groupId, templateText, 'pending', null, allMembers.length, attachmentPath || null)
   db.logSendRecipients(historyId, members, allMembers)
 
   const { succeeded, failed } = await iMessageService.sendToGroup(
@@ -213,6 +213,7 @@ ipcMain.handle('send:toGroup', async (event, groupId, templateText, memberIds) =
         event.sender.send('send:progress', progress)
       }
     },
+    attachmentPath || null,
   )
 
   // Persist automatic iMessage→SMS switches so future sends go straight to SMS
@@ -266,42 +267,70 @@ ipcMain.handle('system:openFdaSettings', () => {
 
 // ── Scheduling ────────────────────────────────────────────────────────────────
 
-// Absolute path to the helper script (same dir as this index.js = app root)
-const HELPER_SCRIPT_PATH = path.join(__dirname, 'scheduled-send-helper.js')
+const HELPER_SCRIPT_PATH   = path.join(__dirname, 'scheduled-send-helper.js')
+const ATTACHMENTS_DIR      = path.join(os.homedir(), 'Library', 'Application Support', 'iMessage Bulk Scheduler', 'attachments')
 
-ipcMain.handle('scheduling:createScheduledSend', async (_event, groupId, templateText, scheduleType, scheduleData, memberIds) => {
-  const plistId = schedulingService.generatePlistId(groupId)
-  const nextRun = schedulingService.calculateNextRun(scheduleType, scheduleData)
+function ensureAttachmentsDir() {
+  if (!fs.existsSync(ATTACHMENTS_DIR)) fs.mkdirSync(ATTACHMENTS_DIR, { recursive: true })
+}
 
-  // Persist to DB first so the helper can find the record when it fires
-  db.createScheduledSend(groupId, templateText, scheduleType, scheduleData, nextRun, plistId, memberIds)
+function copyAttachmentsToStorage(paths) {
+  if (!paths?.length) return []
+  ensureAttachmentsDir()
+  const { randomUUID } = require('crypto')
+  return paths.map(src => {
+    if (!src || !fs.existsSync(src)) return null
+    const ext  = path.extname(src)
+    const dest = path.join(ATTACHMENTS_DIR, `${randomUUID()}${ext}`)
+    fs.copyFileSync(src, dest)
+    return dest
+  }).filter(Boolean)
+}
 
-  // Create + load the launchd plist
+function deleteStoredAttachments(raw) {
+  if (!raw) return
+  let paths
+  try { paths = JSON.parse(raw) } catch { paths = [raw] }
+  for (const p of paths) {
+    if (p && p.startsWith(ATTACHMENTS_DIR)) {
+      try { fs.unlinkSync(p) } catch (_) {}
+    }
+  }
+}
+
+ipcMain.handle('scheduling:createScheduledSend', async (_event, groupId, templateText, scheduleType, scheduleData, memberIds, attachmentPaths) => {
+  const plistId   = schedulingService.generatePlistId(groupId)
+  const nextRun   = schedulingService.calculateNextRun(scheduleType, scheduleData)
+  const stored    = copyAttachmentsToStorage(attachmentPaths || [])
+
+  db.createScheduledSend(groupId, templateText, scheduleType, scheduleData, nextRun, plistId, memberIds, stored.length ? stored : null)
   await schedulingService.createSchedule(plistId, HELPER_SCRIPT_PATH, nextRun, scheduleType, scheduleData)
 
   return { plistId, nextRun: nextRun.toISOString() }
 })
 
 ipcMain.handle('scheduling:cancelScheduledSend', async (_event, id, plistId) => {
-  // Soft-delete in DB and get the plistId (renderer may have already passed it)
+  const row = db.getScheduledSendById(id)
   const dbPlistId = db.cancelScheduledSend(id)
+  if (row?.attachment_path) deleteStoredAttachments(row.attachment_path)
   const resolvedPlistId = plistId || dbPlistId
-  if (resolvedPlistId) {
-    await schedulingService.cancelSchedule(resolvedPlistId)
-  }
+  if (resolvedPlistId) await schedulingService.cancelSchedule(resolvedPlistId)
   return true
 })
 
-ipcMain.handle('scheduling:updateScheduledSend', async (_event, id, plistId, templateText, scheduleType, scheduleData, memberIds) => {
-  // Cancel old launchd job
+ipcMain.handle('scheduling:updateScheduledSend', async (_event, id, plistId, templateText, scheduleType, scheduleData, memberIds, attachmentPaths) => {
+  const old = db.getScheduledSendById(id)
   if (plistId) await schedulingService.cancelSchedule(plistId)
 
-  // Calculate new next run and create a new launchd job with the same plistId
+  const stored  = copyAttachmentsToStorage(attachmentPaths || [])
   const nextRun = schedulingService.calculateNextRun(scheduleType, scheduleData)
   await schedulingService.createSchedule(plistId, HELPER_SCRIPT_PATH, nextRun, scheduleType, scheduleData)
 
-  // Update DB record
-  db.updateScheduledSendDetails(id, templateText, scheduleType, scheduleData, nextRun, memberIds)
+  db.updateScheduledSendDetails(id, templateText, scheduleType, scheduleData, nextRun, memberIds, stored.length ? stored : null)
+
+  // Delete old copies only after DB is updated with new paths
+  if (old?.attachment_path) deleteStoredAttachments(old.attachment_path)
+
   return { nextRun: nextRun.toISOString() }
 })
 
@@ -309,19 +338,85 @@ ipcMain.handle('db:getScheduledSends', (_event, groupId) =>
   db.getScheduledSends(groupId ?? null)
 )
 
-// File dialog (for CSV picker)
 ipcMain.handle('dialog:openFile', async (_event, options) => {
   const result = await dialog.showOpenDialog(options || {})
   return result.canceled ? null : result.filePaths[0]
 })
 
+ipcMain.handle('dialog:openAttachment', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'heic', 'webp', 'tiff'] },
+      { name: 'All Files', extensions: ['*'] },
+    ],
+  })
+  if (result.canceled) return null
+  return result.filePaths
+})
+
+
+// ── Attachment error queue ───────────────────────────────────────────────────
+
+const ERROR_QUEUE_PATH = path.join(os.homedir(), '.imsg-attachment-errors.json')
+
+function drainAttachmentErrors() {
+  try {
+    const raw = fs.readFileSync(ERROR_QUEUE_PATH, 'utf8')
+    const errors = JSON.parse(raw)
+    if (errors.length && mainWindow && !mainWindow.isDestroyed()) {
+      fs.writeFileSync(ERROR_QUEUE_PATH, '[]', 'utf8')
+      mainWindow.webContents.send('attachment:errors', errors)
+    }
+  } catch (_) {}
+}
+
+// ── Send text only (attachment missing recovery) ─────────────────────────────
+
+ipcMain.handle('scheduling:sendTextOnly', async (_e, scheduledSendId) => {
+  const send = db.getScheduledSendById(scheduledSendId)
+  if (!send) throw new Error('Scheduled send not found')
+
+  const allMembers = db.getGroupMembers(send.group_id)
+  const memberIds = send.member_ids ? new Set(JSON.parse(send.member_ids).map(String)) : null
+  const members = memberIds ? allMembers.filter(m => memberIds.has(String(m.id))) : allMembers
+
+  const { succeeded, failed } = await iMessageService.sendToGroup(
+    members,
+    send.template_text,
+    null,  // no progress callback needed
+    null,  // no attachments — they were missing
+  )
+
+  // Persist auto-routing
+  for (const m of succeeded.filter(m => m.autoRouted)) db.setContactService(m.id, 'SMS')
+
+  // Log to history with no attachment_path (they were never sent)
+  const status = failed.length === 0 ? 'sent' : succeeded.length > 0 ? 'partial' : 'failed'
+  const errorLog = failed.length > 0 ? failed.map(f => `${f.member.name}: ${f.error}`).join('\n') : null
+  const { id: historyId } = db.logSendAttempt(send.group_id, send.template_text, status, errorLog, allMembers.length, null)
+  db.logSendRecipients(historyId, members, allMembers)
+
+  // Clean up stored attachment copies and remove the scheduled send entirely
+  deleteStoredAttachments(send.attachment_path)
+  db.cancelScheduledSend(scheduledSendId)
+
+  return { succeeded: succeeded.length, failed: failed.length }
+})
+
 // ── App lifecycle ────────────────────────────────────────────────────────────
+
+app.setAppUserModelId('com.imessage.bulk-scheduler')
 
 app.whenReady().then(() => {
   // Init DB synchronously before window opens so tables exist
   db.init()
 
   createWindow()
+
+  // Drain any attachment errors that fired while the app was closed
+  mainWindow.webContents.once('did-finish-load', drainAttachmentErrors)
+  mainWindow.on('focus', drainAttachmentErrors)
 
   // Watch a sentinel file that scheduled-send-helper touches when it finishes.
   // We watch this instead of app.db to avoid false-firing on the app's own writes.
@@ -331,7 +426,33 @@ app.whenReady().then(() => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         let result = null
         try { result = JSON.parse(fs.readFileSync(SENTINEL_PATH, 'utf8')) } catch (_) {}
+
+        // Attachment error — notify and forward to renderer
+        if (result?.isError && result.type === 'attachmentMissing') {
+          // Clear the queue file so drainAttachmentErrors doesn't re-deliver on focus
+          try { fs.writeFileSync(ERROR_QUEUE_PATH, '[]', 'utf8') } catch (_) {}
+          mainWindow.webContents.send('attachment:errors', [result])
+          if (Notification.isSupported()) {
+            const group = result.groupName ?? 'scheduled message'
+            new Notification({
+              title: 'Scheduled send failed — attachment missing',
+              body: `The image(s) for "${group}" could not be found. Open the app to review.`,
+              urgency: 'critical',
+            }).show()
+          }
+          return
+        }
+
         mainWindow.webContents.send('db:external-change', result)
+
+        if (result && !mainWindow.isFocused() && Notification.isSupported()) {
+          const noun = result.succeeded === 1 ? 'person' : 'people'
+          const group = result.groupName ?? 'group'
+          const body = result.failed === 0
+            ? `Delivered to ${result.succeeded} ${noun}.`
+            : `Sent ${result.succeeded}, failed ${result.failed}.`
+          new Notification({ title: `Scheduled message to ${group} sent`, body }).show()
+        }
       }
     }
   })

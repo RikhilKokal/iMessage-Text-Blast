@@ -111,7 +111,7 @@ async function main() {
 
   // 1. Load scheduled send record
   const schedRows = dbSelect(
-    `SELECT id, group_id, template_text, schedule_type, schedule_interval, member_ids
+    `SELECT id, group_id, template_text, schedule_type, schedule_interval, member_ids, attachment_path
      FROM scheduled_sends
      WHERE launchd_plist_id = '${plistId.replace(/'/g, "''")}' AND is_active = 1
      LIMIT 1`
@@ -122,7 +122,9 @@ async function main() {
     process.exit(0)
   }
 
-  const [schedId, groupId, templateText, scheduleType, scheduleInterval, memberIdsJson] = schedRows[0]
+  const [schedId, groupId, templateText, scheduleType, scheduleInterval, memberIdsJson, attachmentPathRaw] = schedRows[0]
+  let attachmentPath = null
+  try { attachmentPath = attachmentPathRaw ? JSON.parse(attachmentPathRaw) : null } catch { attachmentPath = attachmentPathRaw ? [attachmentPathRaw] : null }
   console.log(`[Helper] Scheduled send id=${schedId} for group=${groupId}`)
 
   // 2. Load ALL group members (needed for total count in history)
@@ -154,10 +156,45 @@ async function main() {
 
   console.log(`[Helper] Sending to ${members.length} of ${allMembers.length} members`)
 
-  // 3. Send — sendCore handles Messages.app launch, template rendering, polling, SMS fallback
-  const { succeeded, failed } = await core.sendToGroup(members, templateText, chatDbQuery)
+  // 3. Check attachments exist before sending
+  const sentinelPath = path.join(os.homedir(), '.imsg-scheduled-changed')
+  const errorQueuePath = path.join(os.homedir(), '.imsg-attachment-errors.json')
 
-  // 4. Persist preferred_service=SMS for auto-routed contacts
+  if (Array.isArray(attachmentPath) && attachmentPath.length > 0) {
+    const missing = attachmentPath.filter(p => !fs.existsSync(p))
+    if (missing.length > 0) {
+      console.log(`[Helper] ${missing.length} attachment(s) missing — aborting send`)
+      const groupNameRow = dbSelect(`SELECT name FROM groups WHERE id = ${groupId} LIMIT 1`)[0]
+      const groupName = groupNameRow?.[0] ?? 'Unknown Group'
+      const errorEntry = {
+        isError: true,
+        type: 'attachmentMissing',
+        scheduledSendId: Number(schedId),
+        groupId: Number(groupId),
+        groupName,
+        hasText: !!(templateText && templateText.trim()),
+        missingCount: missing.length,
+        timestamp: new Date().toISOString(),
+      }
+      // Append to error queue (read by app on startup/focus)
+      let queue = []
+      try { queue = JSON.parse(fs.readFileSync(errorQueuePath, 'utf8')) } catch (_) {}
+      queue.push(errorEntry)
+      fs.writeFileSync(errorQueuePath, JSON.stringify(queue), 'utf8')
+      // Touch sentinel so watcher fires if app is already open
+      fs.writeFileSync(sentinelPath, JSON.stringify(errorEntry), 'utf8')
+      // Deactivate one-time sends so they don't re-fire
+      if (scheduleType === 'once') {
+        dbExec(`UPDATE scheduled_sends SET is_active = 0 WHERE id = ${schedId};`)
+      }
+      process.exit(0)
+    }
+  }
+
+  // 4. Send — sendCore handles Messages.app launch, template rendering, polling, SMS fallback
+  const { succeeded, failed } = await core.sendToGroup(members, templateText, chatDbQuery, { attachmentPath: attachmentPath || null })
+
+  // 5. Persist preferred_service=SMS for auto-routed contacts
   for (const s of succeeded) {
     if (s.autoRouted) {
       dbExec(`UPDATE contacts SET preferred_service = 'SMS', service_confirmed = 1 WHERE id = ${s.id};`)
@@ -165,14 +202,15 @@ async function main() {
     }
   }
 
-  // 5. Write send_history + recipients in one DB round-trip using shared SQL builder
+  // 6. Write send_history + recipients in one DB round-trip using shared SQL builder
   const historySql = core.buildSendHistorySQL({
     groupId,
     templateText,
     succeeded,
     failed,
-    allMembers,   // full group size → total_members_at_send
-    sentMembers: members, // subset actually attempted
+    allMembers,
+    sentMembers: members,
+    attachmentPath: attachmentPath || null,
   })
   dbExec(historySql)
 
@@ -181,7 +219,6 @@ async function main() {
 
   // Signal the Electron app to refresh (watched by the main process).
   // Write result data so the app can show a toast.
-  const sentinelPath = path.join(os.homedir(), '.imsg-scheduled-changed')
   const groupNameRow = dbSelect(`SELECT name FROM groups WHERE id = ${groupId} LIMIT 1`)[0]
   const groupName    = groupNameRow?.[0] ?? 'Unknown Group'
   const autoRoutedNames = succeeded.filter(s => s.autoRouted).map(s => s.name)
@@ -195,7 +232,7 @@ async function main() {
     autoRouted: autoRoutedNames,
   }), 'utf8')
 
-  // 6. Update scheduled_sends record
+  // 7. Update scheduled_sends record
   if (scheduleType === 'recurring') {
     const scheduleData = JSON.parse(scheduleInterval)
     const nextRun = calculateNextRun(scheduleData)
@@ -204,6 +241,15 @@ async function main() {
   } else {
     dbExec(`UPDATE scheduled_sends SET is_active = 0 WHERE id = ${schedId};`)
     console.log('[Helper] One-time send complete — marked inactive.')
+    // Clean up stored attachment copies for one-time sends
+    if (Array.isArray(attachmentPath)) {
+      const appAttachmentsDir = path.join(os.homedir(), 'Library', 'Application Support', 'iMessage Bulk Scheduler', 'attachments')
+      for (const p of attachmentPath) {
+        if (p && p.startsWith(appAttachmentsDir)) {
+          try { fs.unlinkSync(p) } catch (_) {}
+        }
+      }
+    }
   }
 
   process.exit(0)
