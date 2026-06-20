@@ -80,6 +80,10 @@ ipcMain.handle('contacts:syncFromMacOS', async () => {
   }
 })
 
+ipcMain.handle('contacts:getMe', async () => {
+  try { return await contactsService.getMeContact() } catch { return null }
+})
+
 ipcMain.handle('contacts:importCSV', async (_event, filePath) => {
   try {
     return csvService.importFromCSV(filePath)
@@ -191,9 +195,14 @@ ipcMain.handle('contacts:checkCapability', async (_event, members) => checkCapab
 
 // ── Send ──────────────────────────────────────────────────────────────────────
 
+function dedupByPhone(arr) {
+  const seen = new Set()
+  return arr.filter(m => seen.has(m.phone) ? false : (seen.add(m.phone), true))
+}
+
 ipcMain.handle('send:toGroup', async (event, groupId, templateText, memberIds, attachmentPath) => {
   // Fetch members fresh from DB, optionally filtered to a subset
-  const allMembers = db.getGroupMembers(groupId)
+  const allMembers = dedupByPhone(db.getGroupMembers(groupId))
   let members = allMembers
   if (memberIds && memberIds.length > 0) {
     const idSet = new Set(memberIds)
@@ -235,6 +244,79 @@ ipcMain.handle('send:toGroup', async (event, groupId, templateText, memberIds, a
     failed:      failed.length,
     errors:      failed.map(f => `${f.member.name}: ${f.error}`),
     autoRouted:  autoRouted.map(m => m.name),   // names of contacts switched to SMS
+  }
+})
+
+// ── Templates ─────────────────────────────────────────────────────────────────
+
+ipcMain.handle('template:getAll', () => db.getTemplates())
+ipcMain.handle('template:getById', (_e, id) => db.getTemplateById(id))
+
+ipcMain.handle('template:create', (_e, name, templateText, attachmentPaths) => {
+  const stored = copyAttachmentsToStorage(attachmentPaths)
+  const json = stored.length ? JSON.stringify(stored) : null
+  return db.createTemplate(name, templateText, json)
+})
+
+ipcMain.handle('template:update', (_e, id, name, templateText, attachmentPaths) => {
+  const existing = db.getTemplateById(id)
+  if (attachmentPaths !== undefined) {
+    deleteStoredAttachments(existing?.attachment_path)
+    const stored = copyAttachmentsToStorage(attachmentPaths)
+    const json = stored.length ? JSON.stringify(stored) : null
+    db.updateTemplate(id, name, templateText, json)
+  } else {
+    db.updateTemplate(id, name, templateText, existing?.attachment_path ?? null)
+  }
+})
+
+ipcMain.handle('template:delete', (_e, id) => {
+  const tmpl = db.getTemplateById(id)
+  deleteStoredAttachments(tmpl?.attachment_path)
+  db.deleteTemplate(id)
+})
+
+ipcMain.handle('template:send', async (event, templateId, mode, ids) => {
+  const tmpl = db.getTemplateById(templateId)
+  if (!tmpl) throw new Error('Template not found')
+  const attachments = tmpl.attachment_path ? JSON.parse(tmpl.attachment_path) : null
+
+  if (mode === 'groups') {
+    const results = []
+    for (const groupId of ids) {
+      const allMembers = dedupByPhone(db.getGroupMembers(groupId))
+      if (!allMembers.length) { results.push({ groupId, succeeded: 0, failed: 0 }); continue }
+      const { id: historyId } = db.logSendAttempt(groupId, tmpl.template_text, 'pending', null, allMembers.length, attachments, tmpl.name)
+      db.logSendRecipients(historyId, allMembers, allMembers)
+      const { succeeded, failed } = await iMessageService.sendToGroup(
+        allMembers, tmpl.template_text,
+        (p) => { if (!event.sender.isDestroyed()) event.sender.send('send:progress', p) },
+        attachments
+      )
+      const autoRouted = succeeded.filter(m => m.autoRouted)
+      for (const m of autoRouted) db.setContactService(m.id, 'SMS')
+      const status = failed.length === 0 ? 'sent' : succeeded.length > 0 ? 'partial' : 'failed'
+      const errorLog = failed.length ? failed.map(f => `${f.member.name}: ${f.error}`).join('\n') : null
+      db.updateSendStatus(historyId, status, errorLog, new Date().toISOString())
+      results.push({ groupId, succeeded: succeeded.length, failed: failed.length, autoRouted: autoRouted.map(m => m.name) })
+    }
+    return { mode: 'groups', results }
+  } else {
+    const members = db.getContactsByIdsAsMember(ids)
+    if (!members.length) return { mode: 'contacts', succeeded: 0, failed: 0 }
+    const { id: historyId } = db.logSendAttempt(null, tmpl.template_text, 'pending', null, members.length, attachments, tmpl.name)
+    db.logSendRecipients(historyId, members, members)
+    const { succeeded, failed } = await iMessageService.sendToGroup(
+      members, tmpl.template_text,
+      (p) => { if (!event.sender.isDestroyed()) event.sender.send('send:progress', p) },
+      attachments
+    )
+    const autoRouted = succeeded.filter(m => m.autoRouted)
+    for (const m of autoRouted) db.setContactService(m.id, 'SMS')
+    const status = failed.length === 0 ? 'sent' : succeeded.length > 0 ? 'partial' : 'failed'
+    const errorLog = failed.length ? failed.map(f => `${f.member.name}: ${f.error}`).join('\n') : null
+    db.updateSendStatus(historyId, status, errorLog, new Date().toISOString())
+    return { mode: 'contacts', succeeded: succeeded.length, failed: failed.length, autoRouted: autoRouted.map(m => m.name) }
   }
 })
 
@@ -377,7 +459,7 @@ ipcMain.handle('scheduling:sendTextOnly', async (_e, scheduledSendId) => {
   const send = db.getScheduledSendById(scheduledSendId)
   if (!send) throw new Error('Scheduled send not found')
 
-  const allMembers = db.getGroupMembers(send.group_id)
+  const allMembers = dedupByPhone(db.getGroupMembers(send.group_id))
   const memberIds = send.member_ids ? new Set(JSON.parse(send.member_ids).map(String)) : null
   const members = memberIds ? allMembers.filter(m => memberIds.has(String(m.id))) : allMembers
 

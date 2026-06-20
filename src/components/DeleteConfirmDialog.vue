@@ -13,8 +13,12 @@
 </template>
 
 <script setup>
+import { onMounted, onUnmounted } from 'vue'
 defineProps({ groupName: String })
-defineEmits(['confirm', 'close'])
+const emit = defineEmits(['confirm', 'close'])
+function onKeydown(e) { if (e.key === 'Escape') emit('close') }
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <style scoped>

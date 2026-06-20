@@ -7,6 +7,7 @@
     @input="onInput"
     @keydown="onKeydown"
     @paste="onPaste"
+    @copy="onCopy"
     @blur="onEditorBlur"
     @beforeinput="onBeforeInput"
     @mousedown="onMouseDown"
@@ -56,7 +57,7 @@ function serializeChildren(el) {
       result += node.textContent
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       if (node.classList.contains('token-chip') && node.dataset.key) {
-        result += `{{${node.dataset.key}}}`
+        result += `⟦${node.dataset.key}⟧`
       } else if (node.tagName === 'BR') {
         result += '\n'
       } else if (node.tagName === 'DIV') {
@@ -75,9 +76,9 @@ function render(text) {
   if (serialize() === text) return
 
   el.innerHTML = ''
-  const parts = text.split(/({{[^}]+}})/)
+  const parts = text.split(/(⟦[^⟧]+⟧)/)
   for (const part of parts) {
-    const m = part.match(/^{{([^}]+)}}$/)
+    const m = part.match(/^⟦([^⟧]+)⟧$/)
     if (m) {
       el.appendChild(makeChip(m[1]))
     } else if (part) {
@@ -141,6 +142,7 @@ function onBeforeInput(e) {
 }
 
 function onMouseDown(e) {
+  if (e.detail >= 2) return // allow browser double/triple-click selection
   e.preventDefault()
   _isSelecting = true
   _selectionStart = e
@@ -274,10 +276,62 @@ function onKeydown(e) {
   }
 }
 
+function onCopy(e) {
+  const sel = window.getSelection()
+  if (!sel || sel.isCollapsed || !sel.rangeCount) return
+  const range = sel.getRangeAt(0)
+  const el = editorEl.value
+  if (!el || !el.contains(range.commonAncestorContainer)) return
+
+  e.preventDefault()
+  const fragment = range.cloneContents()
+  const tmp = document.createElement('div')
+  tmp.appendChild(fragment)
+  const serialized = serializeChildren(tmp)
+  e.clipboardData.setData('text/plain', serialized)
+  // Mark as token-editor content so paste can restore chips
+  e.clipboardData.setData('text/html', `<meta name="token-editor" content="${encodeURIComponent(serialized)}">`)
+}
+
 function onPaste(e) {
   e.preventDefault()
-  const text = e.clipboardData.getData('text/plain')
-  document.execCommand('insertText', false, text)
+  const html = e.clipboardData.getData('text/html')
+  const meta = html.match(/<meta name="token-editor" content="([^"]+)"/)
+  const text = meta
+    ? decodeURIComponent(meta[1])
+    : e.clipboardData.getData('text/plain')
+
+  const parts = meta ? text.split(/(⟦[^⟧]+⟧)/) : [text]
+
+  if (parts.length === 1) {
+    document.execCommand('insertText', false, parts[0])
+    return
+  }
+
+  const sel = window.getSelection()
+  if (!sel || !sel.rangeCount) return
+  const range = sel.getRangeAt(0)
+  range.deleteContents()
+
+  const frag = document.createDocumentFragment()
+  for (const part of parts) {
+    const m = part.match(/^⟦([^⟧]+)⟧$/)
+    if (m) {
+      frag.appendChild(makeChip(m[1]))
+    } else if (part) {
+      frag.appendChild(document.createTextNode(part))
+    }
+  }
+  const last = frag.lastChild
+  range.insertNode(frag)
+  if (last) {
+    const cur = document.createRange()
+    cur.setStartAfter(last)
+    cur.collapse(true)
+    sel.removeAllRanges()
+    sel.addRange(cur)
+  }
+  emit('update:modelValue', serialize())
 }
 
 // ── Chip selection highlight ───────────────────────────────────────────────
@@ -305,6 +359,7 @@ onUnmounted(() => {
 })
 
 watch(() => props.modelValue, (val) => {
+  if (document.activeElement === editorEl.value) return
   if (serialize() !== val) render(val)
 })
 

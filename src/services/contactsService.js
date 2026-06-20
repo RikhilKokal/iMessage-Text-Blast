@@ -147,4 +147,38 @@ async function syncFromMacOS() {
   return { count: netInserted, updated, edited, removed: netRemoved, denied: false }
 }
 
-module.exports = { syncFromMacOS }
+const ME_SCRIPT = `\
+import Contacts
+let store = CNContactStore()
+let keys = [
+    CNContactGivenNameKey, CNContactFamilyNameKey,
+    CNContactPhoneNumbersKey, CNContactEmailAddressesKey,
+    CNContactOrganizationNameKey, CNContactNicknameKey
+] as [CNKeyDescriptor]
+do {
+    let me = try store.unifiedMeContactWithKeys(toFetch: keys)
+    let name = [me.givenName, me.familyName].filter { !$0.isEmpty }.joined(separator: " ")
+    let phone = me.phoneNumbers.first?.value.stringValue ?? ""
+    let email = (me.emailAddresses.first?.value as String?) ?? ""
+    let company = me.organizationName
+    let nickname = me.nickname
+    print("\\(name)\\t\\(phone)\\t\\(email)\\t\\(company)\\t\\(nickname)")
+} catch { exit(0) }`
+
+async function getMeContact() {
+  const tmpScript = path.join(os.tmpdir(), 'imessage_me_contact.swift')
+  fs.writeFileSync(tmpScript, ME_SCRIPT, 'utf8')
+  try {
+    const { stdout } = await execFileAsync('swift', [tmpScript], { timeout: 10000 })
+    const line = stdout.trim()
+    if (!line) return null
+    const [name, phone, email, company, nickname] = line.split('\t')
+    return { id: -1, name: name || 'Me', phone: phone || '', email: email || '', company: company || '', nickname: nickname || '', service: 'iMessage', service_confirmed: 0 }
+  } catch {
+    return null
+  } finally {
+    try { fs.unlinkSync(tmpScript) } catch (_) {}
+  }
+}
+
+module.exports = { syncFromMacOS, getMeContact }

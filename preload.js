@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('api', {
 
   syncContactsFromMacOS: () =>
     ipcRenderer.invoke('contacts:syncFromMacOS'),
+  getMeContact: () =>
+    ipcRenderer.invoke('contacts:getMe'),
 
   importCSV: (filePath) =>
     ipcRenderer.invoke('contacts:importCSV', filePath),
@@ -110,4 +112,18 @@ contextBridge.exposeInMainWorld('api', {
 
   onAttachmentErrors: (cb) =>
     ipcRenderer.on('attachment:errors', (_e, errors) => cb(errors)),
+
+  // ── Templates ─────────────────────────────────────────────
+  getTemplates: () =>
+    ipcRenderer.invoke('template:getAll'),
+  getTemplateById: (id) =>
+    ipcRenderer.invoke('template:getById', id),
+  createTemplate: (name, text, paths) =>
+    ipcRenderer.invoke('template:create', name, text, paths),
+  updateTemplate: (id, name, text, paths) =>
+    ipcRenderer.invoke('template:update', id, name, text, paths),
+  deleteTemplate: (id) =>
+    ipcRenderer.invoke('template:delete', id),
+  templateSend: (tmplId, mode, ids) =>
+    ipcRenderer.invoke('template:send', tmplId, mode, ids),
 })

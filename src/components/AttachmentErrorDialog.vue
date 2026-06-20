@@ -27,7 +27,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 defineProps({ error: { type: Object, required: true } })
 const emit = defineEmits(['send-text', 'dismiss'])
 const sending = ref(false)
@@ -36,6 +36,9 @@ function handleSendText(id) {
   sending.value = true
   emit('send-text', id)
 }
+function onKeydown(e) { if (e.key === 'Escape') emit('dismiss') }
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <style scoped>

@@ -39,7 +39,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps({
   contactName: { type: String, required: true },
@@ -47,6 +47,9 @@ const props = defineProps({
   sends:       { type: Array,  required: true },
 })
 const emit = defineEmits(['confirm', 'cancel'])
+function onKeydown(e) { if (e.key === 'Escape') cancel() }
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 const saveChoice = ref(false)
 

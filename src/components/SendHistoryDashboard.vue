@@ -25,7 +25,7 @@
             :class="send.status"
           >
             <div class="card-top">
-              <span class="group-name">{{ send.group_name || '(deleted group)' }}</span>
+              <span class="group-name">{{ send.group_name || send.template_name || '(deleted group)' }}</span>
               <span
                 class="badge"
                 :class="{
@@ -186,7 +186,7 @@ onMounted(load)
 const filteredHistory = computed(() => {
   const q = searchQuery.value.toLowerCase()
   return sendHistory.value.filter(s =>
-    (s.group_name || '').toLowerCase().includes(q)
+    (s.group_name || s.template_name || '').toLowerCase().includes(q)
   )
 })
 

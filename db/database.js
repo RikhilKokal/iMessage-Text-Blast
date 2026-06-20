@@ -125,6 +125,21 @@ function createTables() {
   try {
     db.exec(`ALTER TABLE send_history ADD COLUMN attachment_path TEXT`)
   } catch { /* already exists */ }
+
+  try {
+    db.exec(`ALTER TABLE send_history ADD COLUMN template_name TEXT`)
+  } catch { /* already exists */ }
+
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      template_text TEXT NOT NULL DEFAULT '',
+      attachment_path TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`)
+  } catch { /* already exists */ }
 }
 
 // Strip everything except digits, then remove a leading country code 1
@@ -291,7 +306,7 @@ function addContact(name, phone, email, source, company = null, nickname = null)
 }
 
 function getContacts() {
-  return db.prepare('SELECT * FROM contacts ORDER BY name ASC').all()
+  return db.prepare('SELECT * FROM contacts ORDER BY LOWER(name) ASC').all()
 }
 
 function getContactsByIds(ids) {
@@ -351,7 +366,7 @@ function getGroups() {
     FROM groups g
     LEFT JOIN group_members gm ON gm.group_id = g.id
     GROUP BY g.id
-    ORDER BY g.name ASC
+    ORDER BY LOWER(g.name) ASC
   `).all()
 }
 
@@ -504,7 +519,12 @@ function logSendRecipients(sendHistoryId, sentMembers, allMembers) {
   const sentIds = new Set(sentMembers.map(m => m.id))
   const insert = db.prepare('INSERT INTO send_history_recipients (send_history_id, name, phone, received) VALUES (?, ?, ?, ?)')
   const insertAll = db.transaction((rows) => {
-    for (const m of rows) insert.run(sendHistoryId, m.name, m.phone, sentIds.has(m.id) ? 1 : 0)
+    const seen = new Set()
+    for (const m of rows) {
+      if (seen.has(m.phone)) continue
+      seen.add(m.phone)
+      insert.run(sendHistoryId, m.name, m.phone, sentIds.has(m.id) ? 1 : 0)
+    }
   })
   insertAll(allMembers)
 }
@@ -513,13 +533,13 @@ function getSendRecipients(sendHistoryId) {
   return db.prepare('SELECT name, phone, received FROM send_history_recipients WHERE send_history_id = ? ORDER BY name').all(sendHistoryId)
 }
 
-function logSendAttempt(groupId, templateText, status, errorLog = null, totalMembersAtSend = null, attachmentPaths = null) {
+function logSendAttempt(groupId, templateText, status, errorLog = null, totalMembersAtSend = null, attachmentPaths = null, templateName = null) {
   const arr = Array.isArray(attachmentPaths) ? attachmentPaths.filter(Boolean) : (attachmentPaths ? [attachmentPaths] : [])
   const attachmentJson = arr.length ? JSON.stringify(arr) : null
   const result = db.prepare(`
-    INSERT INTO send_history (group_id, template_text, status, error_log, total_members_at_send, attachment_path)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(groupId, templateText, status, errorLog || null, totalMembersAtSend, attachmentJson)
+    INSERT INTO send_history (group_id, template_text, status, error_log, total_members_at_send, attachment_path, template_name)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(groupId, templateText, status, errorLog || null, totalMembersAtSend, attachmentJson, templateName || null)
   return { id: result.lastInsertRowid }
 }
 
@@ -535,6 +555,7 @@ function getSendHistory(groupId = null, limit = 100) {
   const base = `
     SELECT sh.id, sh.template_text, sh.status, sh.error_log,
            sh.created_at, sh.sent_at, sh.attachment_path,
+           sh.template_name,
            g.name AS group_name,
            sh.total_members_at_send AS group_member_count,
            (SELECT COUNT(*) FROM send_history_recipients WHERE send_history_id = sh.id AND received = 1) AS sent_to_count
@@ -551,11 +572,48 @@ function clearSendHistory() {
   db.prepare('DELETE FROM send_history').run()
 }
 
+// ── Templates ─────────────────────────────────────────────────────────────────
+
+function createTemplate(name, templateText, attachmentJson) {
+  const result = db.prepare(
+    'INSERT INTO templates (name, template_text, attachment_path) VALUES (?, ?, ?)'
+  ).run(name.trim(), templateText, attachmentJson || null)
+  return { id: result.lastInsertRowid }
+}
+
+function getTemplates() {
+  return db.prepare('SELECT * FROM templates ORDER BY LOWER(name) ASC').all()
+}
+
+function getTemplateById(id) {
+  return db.prepare('SELECT * FROM templates WHERE id = ?').get(id)
+}
+
+function updateTemplate(id, name, templateText, attachmentJson) {
+  db.prepare(
+    'UPDATE templates SET name=?, template_text=?, attachment_path=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
+  ).run(name.trim(), templateText, attachmentJson || null, id)
+}
+
+function deleteTemplate(id) {
+  db.prepare('DELETE FROM templates WHERE id = ?').run(id)
+}
+
+function getContactsByIdsAsMember(ids) {
+  if (!ids?.length) return []
+  const placeholders = ids.map(() => '?').join(',')
+  return db.prepare(
+    `SELECT id, name, phone, email, company, nickname, source,
+            preferred_service AS service, service_confirmed
+     FROM contacts WHERE id IN (${placeholders})`
+  ).all(ids)
+}
+
 module.exports = {
   init,
   // Contacts
   addContact, upsertMacOSContact, removeStaleMacOSContacts, getPrevMacOSContactIds,
-  getContacts, getContactsByIds, deleteContact, importContactsFromCSV, contactExists,
+  getContacts, getContactsByIds, getContactsByIdsAsMember, deleteContact, importContactsFromCSV, contactExists,
   // Groups
   createGroup, getGroups, getGroupById, updateGroupName, deleteGroup,
   // Group members
@@ -564,5 +622,7 @@ module.exports = {
   logSendAttempt, logSendRecipients, updateSendStatus, getSendHistory, getSendRecipients, clearSendHistory,
   // Scheduled sends
   createScheduledSend, getScheduledSends, getScheduledSendById, cancelScheduledSend, updateScheduledSendNextRun, updateScheduledSendDetails,
+  // Templates
+  createTemplate, getTemplates, getTemplateById, updateTemplate, deleteTemplate,
   DB_PATH,
 }

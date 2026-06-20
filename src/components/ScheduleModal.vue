@@ -68,10 +68,13 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import DateTimePicker from './DateTimePicker.vue'
 
 const emit = defineEmits(['schedule', 'close'])
+function onKeydown(e) { if (e.key === 'Escape') emit('close') }
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 const scheduleType      = ref('once')
 const timeValid         = ref(true)

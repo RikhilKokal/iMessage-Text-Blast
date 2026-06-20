@@ -245,13 +245,13 @@ function renderTemplate(template, contact) {
   const firstName = (contact.name || '').split(' ')[0]
   const lastName  = (contact.name || '').split(' ').slice(1).join(' ')
   return template
-    .replace(/\{\{firstName\}\}/g, firstName)
-    .replace(/\{\{lastName\}\}/g,  lastName)
-    .replace(/\{\{fullName\}\}/g,  contact.name     || '')
-    .replace(/\{\{email\}\}/g,     contact.email    || '')
-    .replace(/\{\{phone\}\}/g,     contact.phone    || '')
-    .replace(/\{\{company\}\}/g,   contact.company  || '')
-    .replace(/\{\{nickname\}\}/g,  contact.nickname || firstName)
+    .replace(/⟦firstName⟧/g, firstName)
+    .replace(/⟦lastName⟧/g,  lastName)
+    .replace(/⟦fullName⟧/g,  contact.name     || '')
+    .replace(/⟦email⟧/g,     contact.email    || '')
+    .replace(/⟦phone⟧/g,     contact.phone    || '')
+    .replace(/⟦company⟧/g,   contact.company  || '')
+    .replace(/⟦nickname⟧/g,  contact.nickname || firstName)
 }
 
 // ── Bulk send ─────────────────────────────────────────────────────────────────
@@ -316,16 +316,27 @@ function buildSendHistorySQL({ groupId, templateText, succeeded, failed, allMemb
   const failLines = failed.map(f => `${f.member.name} (${f.member.phone}): ${f.error}`)
   const errorSql  = failLines.length ? `'${escapeSql(failLines.join('\n'))}'` : 'NULL'
 
+  // Deduplicate by id to handle contacts added twice (e.g. two phone numbers)
+  const dedup = (arr) => {
+    const seen = new Set()
+    return arr.filter(m => { const k = String(m.phone); return seen.has(k) ? false : (seen.add(k), true) })
+  }
+  const dedupedSent    = dedup(sentMembers || allMembers)
+  const dedupedAll     = dedup(allMembers)
+
   // Recipients snapshot: all group members, received=1 only for those actually sent
-  const rows = (sentMembers || allMembers).map(m => {
+  // Use a subquery for send_history_id so all rows reference the same just-inserted row,
+  // avoiding the bug where last_insert_rowid() updates after each recipient row is inserted.
+  const historyIdExpr = `(SELECT id FROM send_history ORDER BY id DESC LIMIT 1)`
+  const rows = dedupedSent.map(m => {
     const received = sentIds.has(String(m.id)) ? 1 : 0
-    return `(last_insert_rowid(), '${escapeSql(m.name)}', '${escapeSql(m.phone)}', ${received})`
+    return `(${historyIdExpr}, '${escapeSql(m.name)}', '${escapeSql(m.phone)}', ${received})`
   })
   // Non-attempted members (deselected) also recorded as received=0
-  const attemptedIds = new Set((sentMembers || allMembers).map(m => String(m.id)))
-  for (const m of allMembers) {
+  const attemptedIds = new Set(dedupedSent.map(m => String(m.id)))
+  for (const m of dedupedAll) {
     if (!attemptedIds.has(String(m.id))) {
-      rows.push(`(last_insert_rowid(), '${escapeSql(m.name)}', '${escapeSql(m.phone)}', 0)`)
+      rows.push(`(${historyIdExpr}, '${escapeSql(m.name)}', '${escapeSql(m.phone)}', 0)`)
     }
   }
 
@@ -334,7 +345,7 @@ function buildSendHistorySQL({ groupId, templateText, succeeded, failed, allMemb
 
   return `
 INSERT INTO send_history (group_id, template_text, status, error_log, total_members_at_send, attachment_path, created_at, sent_at)
-VALUES (${groupId}, '${escapeSql(templateText)}', '${status}', ${errorSql}, ${allMembers.length}, ${attachSql}, CURRENT_TIMESTAMP, '${sentAt}');
+VALUES (${groupId}, '${escapeSql(templateText)}', '${status}', ${errorSql}, ${dedupedAll.length}, ${attachSql}, CURRENT_TIMESTAMP, '${sentAt}');
 INSERT INTO send_history_recipients (send_history_id, name, phone, received) VALUES
   ${rows.join(',\n  ')};`
 }

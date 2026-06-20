@@ -110,15 +110,7 @@
       </section>
 
       <!-- ── Attachment ── -->
-      <div class="attachment-row">
-        <button v-if="attachmentPaths.length < MAX_ATTACHMENTS" class="btn-attach" @click="pickAttachment" title="Attach files (max 8)">📎 Attach File</button>
-        <div class="attachment-chips">
-          <div v-for="(p, i) in attachmentPaths" :key="p" class="attachment-chip">
-            <span class="attachment-name">{{ p.split('/').pop() }}</span>
-            <button class="attachment-remove" @click="removeAttachment(i)" title="Remove">×</button>
-          </div>
-        </div>
-      </div>
+      <AttachmentPicker v-model="attachmentPaths" />
 
       <!-- ── Send ── -->
       <section class="send-bar">
@@ -181,8 +173,9 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, inject } from 'vue'
+import { ref, computed, watch, nextTick, inject, onMounted, onUnmounted } from 'vue'
 import AddMemberModal      from './AddMemberModal.vue'
+import AttachmentPicker    from './AttachmentPicker.vue'
 import DeleteConfirmDialog from './DeleteConfirmDialog.vue'
 import MessagePreview      from './MessagePreview.vue'
 import ScheduleModal       from './ScheduleModal.vue'
@@ -216,29 +209,22 @@ const tokenEditorEl   = ref(null)
 const showAddModal    = ref(false)
 const showDeleteDialog = ref(false)
 const showScheduleModal = ref(false)
+
+function onKeydown(e) {
+  if (e.key !== 'Escape') return
+  if (unknownWarning.value)    { unknownWarning.value = null; return }
+  if (showDeleteDialog.value)  { showDeleteDialog.value = false; return }
+  if (showScheduleModal.value) { showScheduleModal.value = false; return }
+  if (showAddModal.value)      { showAddModal.value = false; return }
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 const template          = ref('')
 const selectedMemberIds = ref(new Set())
 const knownMemberIds    = ref(new Set())
 const isSending          = ref(false)
 const sendProgress       = ref(null)
-const MAX_ATTACHMENTS    = 8
 const attachmentPaths    = ref([])
-
-async function pickAttachment() {
-  const remaining = MAX_ATTACHMENTS - attachmentPaths.value.length
-  if (remaining <= 0) return
-  const filePaths = await window.api.openAttachmentDialog(MAX_ATTACHMENTS)
-  if (!filePaths?.length) return
-  const combined = [...attachmentPaths.value, ...filePaths]
-  if (combined.length > MAX_ATTACHMENTS) {
-    showToast(`Max ${MAX_ATTACHMENTS} files`, `Only the first ${MAX_ATTACHMENTS} selected files were added.`, 'error', 4000)
-  }
-  attachmentPaths.value = combined.slice(0, MAX_ATTACHMENTS)
-}
-
-function removeAttachment(index) {
-  attachmentPaths.value = attachmentPaths.value.filter((_, i) => i !== index)
-}
 
 // ── Computed ───────────────────────────────────────────────────────────────
 const selectedMembers = computed(() => props.members.filter(m => selectedMemberIds.value.has(m.id)))
@@ -294,6 +280,7 @@ function startEdit() {
   nextTick(() => nameInput.value?.select())
 }
 function saveName() {
+  if (!editingName.value) return
   const t = draftName.value.trim()
   if (t && t !== props.group.name) emit('update-name', t)
   editingName.value = false
@@ -465,6 +452,8 @@ async function handleSchedule(info) {
 }
 </script>
 
+<style src="../styles/message-panel.css"></style>
+
 <style scoped>
 .group-detail {
   display: flex;
@@ -473,19 +462,12 @@ async function handleSchedule(info) {
   overflow: hidden;
 }
 
-/* ── Header ──────────────────────────────────────────────────────────────── */
+/* ── Header overrides ────────────────────────────────────────────────────── */
 .detail-header {
-  flex-shrink: 0;
-  display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
   padding: 24px 28px 18px;
-  border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
-
-.title-area { flex: 1; min-width: 0; }
 
 .group-title {
   font-size: 22px;
@@ -504,53 +486,22 @@ async function handleSchedule(info) {
   text-overflow: ellipsis;
 }
 .group-title:hover { background: var(--bg); }
-.edit-hint { font-size: 13px; color: var(--text-2); opacity: 0; transition: opacity 0.12s; }
+.edit-hint { font-size: 13px; }
 .group-title:hover .edit-hint { opacity: 1; }
 
-.name-editor {
-  font-size: 22px;
-  font-weight: 700;
-  border: 2px solid var(--accent);
-  border-radius: 6px;
-  padding: 2px 6px;
-  width: 100%;
-  max-width: 440px;
-}
+.name-editor { font-size: 22px; max-width: 440px; }
 
 .member-badge { font-size: 12px; color: var(--text-2); margin-top: 4px; }
 
 /* ── Scrollable body ─────────────────────────────────────────────────────── */
 .detail-body {
-  flex: 1;
-  overflow-y: auto;
   padding: 24px 28px 32px;
-  display: flex;
-  flex-direction: column;
   gap: 20px;
 }
 
 .detail-body > * {
   flex-shrink: 0;
 }
-
-/* ── Card ────────────────────────────────────────────────────────────────── */
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: visible;
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
-  border-radius: var(--radius) var(--radius) 0 0;
-}
-.card-header h2 { font-size: 13px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.04em; }
 
 /* ── Members ─────────────────────────────────────────────────────────────── */
 .members-list {
@@ -700,44 +651,6 @@ async function handleSchedule(info) {
   color: var(--text-2);
 }
 
-/* ── Template ────────────────────────────────────────────────────────────── */
-.var-picker {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
-}
-.var-label { font-size: 11px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.04em; margin-right: 2px; }
-
-.var-btn {
-  padding: 2px 10px;
-  border-radius: 4px;
-  border: 1px solid var(--accent-tint-border);
-  background: var(--accent-tint);
-  font-family: var(--font);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--accent-tint-text);
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
-  line-height: 1.6;
-}
-.var-btn:hover { background: #cce2ff; border-color: var(--accent-tint-text); }
-
-.preview-placeholder {
-  padding: 20px 16px;
-  font-size: 13px;
-  color: var(--text-2);
-  text-align: center;
-  font-style: italic;
-}
-
-
-/* ── Toast stack ─────────────────────────────────────────────────────────── */
-
 /* ── Send bar ────────────────────────────────────────────────────────────── */
 .send-bar {
   flex-shrink: 0;
@@ -750,12 +663,6 @@ async function handleSchedule(info) {
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
-
-.send-info {
-  font-size: 13px;
-  color: var(--text-2);
-}
-.send-info strong { color: var(--text); font-weight: 600; }
 
 .send-actions { display: flex; gap: 8px; }
 .send-actions button { padding: 7px 18px; }
@@ -793,64 +700,4 @@ async function handleSchedule(info) {
 }
 .unknown-warning-actions button { padding: 8px 18px; }
 
-.attachment-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-top: -16px;
-  flex-wrap: wrap;
-}
-
-.attachment-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.btn-attach {
-  background: var(--surface);
-  border: 1px dashed var(--border);
-  border-radius: 8px;
-  padding: 6px 14px;
-  font-size: 13px;
-  cursor: pointer;
-  color: var(--text-muted);
-  transition: border-color 0.15s, color 0.15s;
-}
-.btn-attach:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.attachment-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--accent-soft, rgba(99,102,241,0.12));
-  border: 1px solid var(--accent);
-  border-radius: 20px;
-  padding: 3px 10px 3px 12px;
-  font-size: 12px;
-  color: var(--accent);
-  max-width: 260px;
-}
-
-.attachment-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.attachment-remove {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--accent);
-  font-size: 16px;
-  line-height: 1;
-  padding: 0 2px;
-  opacity: 0.7;
-  transition: opacity 0.15s;
-}
-.attachment-remove:hover { opacity: 1; }
 </style>

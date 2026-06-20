@@ -12,6 +12,17 @@
         :selectedGroupId="selectedGroupId"
         @select="selectGroup"
       />
+
+      <div class="sidebar-section-header">
+        <span>Templates</span>
+        <button class="btn-icon-new" @click="createNewTemplate" title="New template">+</button>
+      </div>
+      <TemplatesList
+        :templates="templates"
+        :selectedTemplateId="selectedTemplateId"
+        @select="selectTemplate"
+      />
+
       <div class="sidebar-footer">
         <button class="btn-secondary small full-width" @click="showHistory = true">
           📋 Send History
@@ -60,6 +71,17 @@
         @add-member="addMemberToGroup"
         @remove-member="removeMemberFromGroup"
         @set-service="selectGroup(selectedGroupId)"
+      />
+      <TemplateDetail
+        v-else-if="selectedTemplate"
+        :template="selectedTemplate"
+        :groups="groups"
+        :draft="templateDrafts[selectedTemplate.id] ?? null"
+        @deleted="onTemplateDeleted"
+        @updated="loadTemplates"
+        @renamed="onTemplateRenamed"
+        @draft="onTemplateDraft"
+        @saved="onTemplateSaved"
       />
       <div v-else-if="groupsLoading" class="empty-state-center">
         <p class="loading-text">Loading groups…</p>
@@ -149,6 +171,8 @@ import { ref, computed, onMounted, provide } from 'vue'
 
 import GroupsList from './components/GroupsList.vue'
 import GroupDetail from './components/GroupDetail.vue'
+import TemplatesList from './components/TemplatesList.vue'
+import TemplateDetail from './components/TemplateDetail.vue'
 import CreateGroupDialog from './components/CreateGroupDialog.vue'
 import SendHistoryDashboard    from './components/SendHistoryDashboard.vue'
 import ScheduledSendsDashboard from './components/ScheduledSendsDashboard.vue'
@@ -232,6 +256,57 @@ const selectedGroup = computed(() =>
   groups.value.find((g) => g.id === selectedGroupId.value) ?? null
 )
 
+// ── Templates ───────────────────────────────────────────────────────────────
+const templates = ref([])
+const selectedTemplateId = ref(null)
+const selectedTemplate = computed(() =>
+  templates.value.find(t => t.id === selectedTemplateId.value) ?? null
+)
+
+async function loadTemplates() {
+  templates.value = await window.api.getTemplates()
+}
+
+function selectTemplate(id) {
+  selectedTemplateId.value = id
+  selectedGroupId.value = null
+}
+
+async function createNewTemplate() {
+  try {
+    const existingNames = new Set(templates.value.map(t => t.name))
+    let name = 'New Template'
+    let n = 2
+    while (existingNames.has(name)) name = `New Template ${n++}`
+    const { id } = await window.api.createTemplate(name, '', [])
+    await loadTemplates()
+    selectTemplate(id)
+  } catch (err) {
+    showToast(err.message, 'error')
+  }
+}
+
+async function onTemplateDeleted() {
+  selectedTemplateId.value = null
+  await loadTemplates()
+}
+
+async function onTemplateRenamed() {
+  await loadTemplates()
+  showToast('Template renamed.')
+}
+
+const templateDrafts = ref({})
+
+function onTemplateDraft({ id, body, attachments }) {
+  templateDrafts.value = { ...templateDrafts.value, [id]: { body, attachments } }
+}
+function onTemplateSaved(id) {
+  const d = { ...templateDrafts.value }
+  delete d[id]
+  templateDrafts.value = d
+}
+
 let toastTimer = null
 function showToast(message, type = 'success') {
   toast.value = { message, type }
@@ -246,6 +321,7 @@ async function loadGroups() {
 
 async function selectGroup(groupId) {
   selectedGroupId.value = groupId
+  selectedTemplateId.value = null
   groupMembers.value = await window.api.getGroupMembers(groupId)
 }
 
@@ -276,7 +352,10 @@ async function updateGroupName(newName) {
     await loadGroups()
     showToast('Group renamed.')
   } catch (err) {
-    showToast(err.message, 'error')
+    const msg = /UNIQUE constraint failed|already exists/i.test(err.message)
+      ? `A group named "${newName}" already exists. Please choose a different name.`
+      : err.message
+    addAppToast('Rename failed', msg, 'error')
   }
 }
 
@@ -460,6 +539,7 @@ onMounted(async () => {
   // Silent background sync on launch — only toasts if new contacts are found
   await syncContacts(true)
   await loadGroups()
+  await loadTemplates()
 
   // When the scheduled-send-helper finishes, reload the current group,
   // refresh the scheduled sends dashboard, and show a toast.
@@ -660,6 +740,20 @@ input:focus { border-color: var(--accent); }
   justify-content: center;
 }
 .btn-icon-new:hover { background: var(--accent-h); }
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px 4px;
+  border-top: 1px solid var(--border);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
 
 .sidebar-footer {
   padding: 12px 16px;

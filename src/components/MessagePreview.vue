@@ -8,13 +8,27 @@
           <span class="chip-arrow">▾</span>
         </button>
         <div v-if="open" class="dropdown" :style="{ maxHeight: dropdownMaxH + 'px' }">
-          <button
-            v-for="c in contacts"
-            :key="c.id"
-            class="dropdown-item"
-            :class="{ active: c.id === current.id }"
-            @click="select(c)"
-          >{{ c.name }}</button>
+          <template v-if="contactGroups">
+            <template v-for="g in contactGroups" :key="g.groupName">
+              <div class="dropdown-heading">{{ g.groupName }}</div>
+              <button
+                v-for="c in g.contacts"
+                :key="c.id"
+                class="dropdown-item"
+                :class="{ active: c.id === current.id }"
+                @click="select(c)"
+              >{{ c.name }}</button>
+            </template>
+          </template>
+          <template v-else>
+            <button
+              v-for="c in flatContacts"
+              :key="c.id"
+              class="dropdown-item"
+              :class="{ active: c.id === current.id }"
+              @click="select(c)"
+            >{{ c.name }}</button>
+          </template>
         </div>
       </div>
     </div>
@@ -26,16 +40,24 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps({
-  template: { type: String, required: true },
-  contacts: { type: Array, required: true },
+  template:      { type: String, required: true },
+  contacts:      { type: Array, required: true },
+  contactGroups: { type: Array, default: null },
+  // Array of { groupName: string, contacts: Contact[] }
 })
+
+const flatContacts = computed(() =>
+  props.contactGroups
+    ? props.contactGroups.flatMap(g => g.contacts)
+    : props.contacts
+)
 
 const open        = ref(false)
 const current     = ref(props.contacts[0])
 const chipWrap    = ref(null)
 const dropdownMaxH = ref(220)
 
-watch(() => props.contacts, (contacts) => {
+watch(flatContacts, (contacts) => {
   if (!contacts.find(c => c.id === current.value?.id)) {
     current.value = contacts[0]
   }
@@ -76,13 +98,13 @@ const renderedMessage = computed(() => {
   const c = current.value
   if (!c) return ''
   return props.template
-    .replace(/\{\{firstName\}\}/g,  c.name?.split(' ')[0] ?? '')
-    .replace(/\{\{lastName\}\}/g,   c.name?.split(' ').slice(1).join(' ') ?? '')
-    .replace(/\{\{fullName\}\}/g,   c.name     ?? '')
-    .replace(/\{\{email\}\}/g,      c.email    || '(no email)')
-    .replace(/\{\{phone\}\}/g,      c.phone    || '(no phone)')
-    .replace(/\{\{company\}\}/g,    c.company  || '(no company)')
-    .replace(/\{\{nickname\}\}/g,   c.nickname || c.name?.split(' ')[0] || '')
+    .replace(/⟦firstName⟧/g,  c.name?.split(' ')[0] ?? '')
+    .replace(/⟦lastName⟧/g,   c.name?.split(' ').slice(1).join(' ') ?? '')
+    .replace(/⟦fullName⟧/g,   c.name     ?? '')
+    .replace(/⟦email⟧/g,      c.email    || '(no email)')
+    .replace(/⟦phone⟧/g,      c.phone    || '(no phone)')
+    .replace(/⟦company⟧/g,    c.company  || '(no company)')
+    .replace(/⟦nickname⟧/g,   c.nickname || c.name?.split(' ')[0] || '')
 })
 </script>
 
@@ -154,6 +176,18 @@ const renderedMessage = computed(() => {
   box-shadow: 0 4px 16px rgba(0,0,0,0.12);
   z-index: 100;
 }
+
+.dropdown-heading {
+  padding: 6px 12px 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  pointer-events: none;
+  border-top: 1px solid var(--border);
+}
+.dropdown-heading:first-child { border-top: none; }
 
 .dropdown-item {
   display: block;

@@ -11,6 +11,7 @@
         v-model="search"
         placeholder="Search by name or phone…"
         class="search-input"
+        @keyup.enter="filtered.length > 0 && $emit('add', filtered[0].id)"
       />
 
       <div class="list-wrap">
@@ -42,24 +43,27 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 
 const props = defineProps({
   existingMemberIds: { type: Array, default: () => [] },
 })
-defineEmits(['add', 'close'])
+const emit = defineEmits(['add', 'close'])
 
 const allContacts = ref([])
 const search = ref('')
 const loading = ref(true)
 const searchEl = ref(null)
 
+function onKeydown(e) { if (e.key === 'Escape') emit('close') }
 onMounted(async () => {
   allContacts.value = await window.api.getContacts()
   loading.value = false
   searchEl.value?.focus()
+  window.addEventListener('keydown', onKeydown)
 })
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 // Contacts not already in this group
 const available = computed(() =>
@@ -70,9 +74,13 @@ const available = computed(() =>
 const filtered = computed(() => {
   const q = search.value.toLowerCase()
   if (!q) return available.value
-  return available.value.filter(
-    (c) => c.name.toLowerCase().includes(q) || c.phone.includes(q)
-  )
+  const qDigits = q.replace(/\D/g, '')
+  return available.value.filter(c => {
+    if (c.name.toLowerCase().includes(q)) return true
+    if ((c.nickname || '').toLowerCase().includes(q)) return true
+    if (qDigits && c.phone.replace(/\D/g, '').includes(qDigits)) return true
+    return false
+  })
 })
 
 // Set of names that appear more than once in the available list (i.e. multiple numbers)
