@@ -131,6 +131,10 @@ function createTables() {
   } catch { /* already exists */ }
 
   try {
+    db.exec(`ALTER TABLE scheduled_sends ADD COLUMN delay_seconds INTEGER NOT NULL DEFAULT 0`)
+  } catch { /* already exists */ }
+
+  try {
     db.exec(`CREATE TABLE IF NOT EXISTS templates (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
@@ -442,11 +446,11 @@ function serializeAttachments(attachmentPaths) {
   return arr.length ? JSON.stringify(arr) : null
 }
 
-function createScheduledSend(groupId, templateText, scheduleType, scheduleData, nextRun, plistId, memberIds = null, attachmentPaths = null) {
+function createScheduledSend(groupId, templateText, scheduleType, scheduleData, nextRun, plistId, memberIds = null, attachmentPaths = null, delaySeconds = 0) {
   const result = db.prepare(`
     INSERT INTO scheduled_sends
-      (group_id, template_text, schedule_type, schedule_interval, next_run, launchd_plist_id, member_ids, attachment_path)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      (group_id, template_text, schedule_type, schedule_interval, next_run, launchd_plist_id, member_ids, attachment_path, delay_seconds)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     groupId,
     templateText,
@@ -456,6 +460,7 @@ function createScheduledSend(groupId, templateText, scheduleType, scheduleData, 
     plistId,
     memberIds && memberIds.length ? JSON.stringify(memberIds) : null,
     serializeAttachments(attachmentPaths),
+    delaySeconds || 0,
   )
   return { id: result.lastInsertRowid, plistId }
 }

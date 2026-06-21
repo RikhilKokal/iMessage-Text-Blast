@@ -12,15 +12,19 @@ const contactsService = require('./src/services/contactsService')
 const csvService = require('./src/services/csvService')
 const iMessageService = require('./src/services/iMessageService')
 const schedulingService = require('./src/services/schedulingService')
+const { BUFFER_DONE_PATH } = require('./src/services/sendCore')
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
 let mainWindow = null
+let macNotifsEnabled = true
+
+ipcMain.on('system:setMacNotifs', (_e, enabled) => { macNotifsEnabled = enabled })
 
 function createWindow() {
   const win = new BrowserWindow({
     width: 1100,
-    height: 750,
+    height: 800,
     minWidth: 800,
     minHeight: 600,
     titleBarStyle: 'hiddenInset', // macOS native feel
@@ -200,7 +204,7 @@ function dedupByPhone(arr) {
   return arr.filter(m => seen.has(m.phone) ? false : (seen.add(m.phone), true))
 }
 
-ipcMain.handle('send:toGroup', async (event, groupId, templateText, memberIds, attachmentPath) => {
+ipcMain.handle('send:toGroup', async (event, groupId, templateText, memberIds, attachmentPath, delaySeconds = 0) => {
   // Fetch members fresh from DB, optionally filtered to a subset
   const allMembers = dedupByPhone(db.getGroupMembers(groupId))
   let members = allMembers
@@ -214,7 +218,7 @@ ipcMain.handle('send:toGroup', async (event, groupId, templateText, memberIds, a
   const { id: historyId } = db.logSendAttempt(groupId, templateText, 'pending', null, allMembers.length, attachmentPath || null)
   db.logSendRecipients(historyId, members, allMembers)
 
-  const { succeeded, failed } = await iMessageService.sendToGroup(
+  const result = await iMessageService.sendToGroup(
     members,
     templateText,
     (progress) => {
@@ -223,7 +227,16 @@ ipcMain.handle('send:toGroup', async (event, groupId, templateText, memberIds, a
       }
     },
     attachmentPath || null,
+    delaySeconds,
   )
+
+  // Buffered sends run in a detached helper process — log optimistically and return early
+  if (result.buffered) {
+    db.updateSendStatus(historyId, 'sent', null, new Date().toISOString())
+    return { succeeded: members.length, failed: 0, errors: [], autoRouted: [], buffered: true }
+  }
+
+  const { succeeded, failed } = result
 
   // Persist automatic iMessage→SMS switches so future sends go straight to SMS
   const autoRouted = succeeded.filter(m => m.autoRouted)
@@ -243,7 +256,8 @@ ipcMain.handle('send:toGroup', async (event, groupId, templateText, memberIds, a
     succeeded:   succeeded.length,
     failed:      failed.length,
     errors:      failed.map(f => `${f.member.name}: ${f.error}`),
-    autoRouted:  autoRouted.map(m => m.name),   // names of contacts switched to SMS
+    autoRouted:  autoRouted.map(m => m.name),
+    buffered:    false,
   }
 })
 
@@ -276,7 +290,7 @@ ipcMain.handle('template:delete', (_e, id) => {
   db.deleteTemplate(id)
 })
 
-ipcMain.handle('template:send', async (event, templateId, mode, ids) => {
+ipcMain.handle('template:send', async (event, templateId, mode, ids, delaySeconds = 0) => {
   const tmpl = db.getTemplateById(templateId)
   if (!tmpl) throw new Error('Template not found')
   const attachments = tmpl.attachment_path ? JSON.parse(tmpl.attachment_path) : null
@@ -288,35 +302,46 @@ ipcMain.handle('template:send', async (event, templateId, mode, ids) => {
       if (!allMembers.length) { results.push({ groupId, succeeded: 0, failed: 0 }); continue }
       const { id: historyId } = db.logSendAttempt(groupId, tmpl.template_text, 'pending', null, allMembers.length, attachments, tmpl.name)
       db.logSendRecipients(historyId, allMembers, allMembers)
-      const { succeeded, failed } = await iMessageService.sendToGroup(
+      const result = await iMessageService.sendToGroup(
         allMembers, tmpl.template_text,
         (p) => { if (!event.sender.isDestroyed()) event.sender.send('send:progress', p) },
-        attachments
+        attachments, delaySeconds
       )
-      const autoRouted = succeeded.filter(m => m.autoRouted)
-      for (const m of autoRouted) db.setContactService(m.id, 'SMS')
-      const status = failed.length === 0 ? 'sent' : succeeded.length > 0 ? 'partial' : 'failed'
-      const errorLog = failed.length ? failed.map(f => `${f.member.name}: ${f.error}`).join('\n') : null
-      db.updateSendStatus(historyId, status, errorLog, new Date().toISOString())
-      results.push({ groupId, succeeded: succeeded.length, failed: failed.length, autoRouted: autoRouted.map(m => m.name) })
+      if (result.buffered) {
+        db.updateSendStatus(historyId, 'sent', null, new Date().toISOString())
+        results.push({ groupId, succeeded: allMembers.length, failed: 0 })
+      } else {
+        const { succeeded, failed } = result
+        const autoRouted = succeeded.filter(m => m.autoRouted)
+        for (const m of autoRouted) db.setContactService(m.id, 'SMS')
+        const status = failed.length === 0 ? 'sent' : succeeded.length > 0 ? 'partial' : 'failed'
+        const errorLog = failed.length ? failed.map(f => `${f.member.name}: ${f.error}`).join('\n') : null
+        db.updateSendStatus(historyId, status, errorLog, new Date().toISOString())
+        results.push({ groupId, succeeded: succeeded.length, failed: failed.length, autoRouted: autoRouted.map(m => m.name) })
+      }
     }
-    return { mode: 'groups', results }
+    return { mode: 'groups', results, buffered: delaySeconds > 0 }
   } else {
     const members = db.getContactsByIdsAsMember(ids)
     if (!members.length) return { mode: 'contacts', succeeded: 0, failed: 0 }
     const { id: historyId } = db.logSendAttempt(null, tmpl.template_text, 'pending', null, members.length, attachments, tmpl.name)
     db.logSendRecipients(historyId, members, members)
-    const { succeeded, failed } = await iMessageService.sendToGroup(
+    const result = await iMessageService.sendToGroup(
       members, tmpl.template_text,
       (p) => { if (!event.sender.isDestroyed()) event.sender.send('send:progress', p) },
-      attachments
+      attachments, delaySeconds
     )
+    if (result.buffered) {
+      db.updateSendStatus(historyId, 'sent', null, new Date().toISOString())
+      return { mode: 'contacts', succeeded: members.length, failed: 0, autoRouted: [], buffered: true }
+    }
+    const { succeeded, failed } = result
     const autoRouted = succeeded.filter(m => m.autoRouted)
     for (const m of autoRouted) db.setContactService(m.id, 'SMS')
     const status = failed.length === 0 ? 'sent' : succeeded.length > 0 ? 'partial' : 'failed'
     const errorLog = failed.length ? failed.map(f => `${f.member.name}: ${f.error}`).join('\n') : null
     db.updateSendStatus(historyId, status, errorLog, new Date().toISOString())
-    return { mode: 'contacts', succeeded: succeeded.length, failed: failed.length, autoRouted: autoRouted.map(m => m.name) }
+    return { mode: 'contacts', succeeded: succeeded.length, failed: failed.length, autoRouted: autoRouted.map(m => m.name), buffered: false }
   }
 })
 
@@ -380,12 +405,12 @@ function deleteStoredAttachments(raw) {
   }
 }
 
-ipcMain.handle('scheduling:createScheduledSend', async (_event, groupId, templateText, scheduleType, scheduleData, memberIds, attachmentPaths) => {
+ipcMain.handle('scheduling:createScheduledSend', async (_event, groupId, templateText, scheduleType, scheduleData, memberIds, attachmentPaths, delaySeconds = 0) => {
   const plistId   = schedulingService.generatePlistId(groupId)
   const nextRun   = schedulingService.calculateNextRun(scheduleType, scheduleData)
   const stored    = copyAttachmentsToStorage(attachmentPaths || [])
 
-  db.createScheduledSend(groupId, templateText, scheduleType, scheduleData, nextRun, plistId, memberIds, stored.length ? stored : null)
+  db.createScheduledSend(groupId, templateText, scheduleType, scheduleData, nextRun, plistId, memberIds, stored.length ? stored : null, delaySeconds)
   await schedulingService.createSchedule(plistId, HELPER_SCRIPT_PATH, nextRun, scheduleType, scheduleData)
 
   return { plistId, nextRun: nextRun.toISOString() }
@@ -514,7 +539,7 @@ app.whenReady().then(() => {
           // Clear the queue file so drainAttachmentErrors doesn't re-deliver on focus
           try { fs.writeFileSync(ERROR_QUEUE_PATH, '[]', 'utf8') } catch (_) {}
           mainWindow.webContents.send('attachment:errors', [result])
-          if (Notification.isSupported()) {
+          if (macNotifsEnabled && Notification.isSupported()) {
             const group = result.groupName ?? 'scheduled message'
             new Notification({
               title: 'Scheduled send failed — attachment missing',
@@ -527,7 +552,7 @@ app.whenReady().then(() => {
 
         mainWindow.webContents.send('db:external-change', result)
 
-        if (result && !mainWindow.isFocused() && Notification.isSupported()) {
+        if (result && macNotifsEnabled && !mainWindow.isFocused() && Notification.isSupported()) {
           const noun = result.succeeded === 1 ? 'person' : 'people'
           const group = result.groupName ?? 'group'
           const body = result.failed === 0
@@ -538,6 +563,30 @@ app.whenReady().then(() => {
       }
     }
   })
+
+  // Watch for buffered-send completion sentinel written by the detached AppleScript.
+  function handleBufferDone() {
+    if (!fs.existsSync(BUFFER_DONE_PATH)) return
+    let result = null
+    try { result = JSON.parse(fs.readFileSync(BUFFER_DONE_PATH, 'utf8')) } catch (_) {}
+    try { fs.unlinkSync(BUFFER_DONE_PATH) } catch (_) {}
+    if (!result || !result.succeeded) return
+    const noun = result.succeeded === 1 ? 'message' : 'messages'
+    const body = `All ${result.succeeded} ${noun} delivered.`
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('buffer:complete', { succeeded: result.succeeded, autoRouted: result.autoRouted ?? [] })
+    }
+    if (macNotifsEnabled && Notification.isSupported()) {
+      new Notification({ title: 'Buffered send complete', body }).show()
+    }
+  }
+
+  fs.watchFile(BUFFER_DONE_PATH, { interval: 2000, persistent: false }, (curr, prev) => {
+    if (curr.mtimeMs !== prev.mtimeMs) handleBufferDone()
+  })
+
+  // Drain sentinel if it was written while the app was closed
+  mainWindow.webContents.once('did-finish-load', handleBufferDone)
 
   app.on('activate', () => {
     if (mainWindow) {

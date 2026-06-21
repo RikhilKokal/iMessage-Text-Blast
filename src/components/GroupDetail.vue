@@ -128,6 +128,15 @@
           </button>
         </div>
       </section>
+      <div class="buffer-wrap">
+        <div class="buffer-row buffer-row--right" @click="useBuffer = !useBuffer">
+          <span class="round-check" :class="{ checked: useBuffer }"></span>
+          <span>Delay between messages</span>
+          <BufferSecondsInput v-model="bufferSeconds" :disabled="!useBuffer" />
+          <span>sec</span>
+        </div>
+        <div class="buffer-hint">max 60</div>
+      </div>
 
     </div><!-- end detail-body -->
 
@@ -148,7 +157,10 @@
 
     <ScheduleModal
       v-if="showScheduleModal"
+      :initialUseBuffer="useBuffer"
+      :initialBufferSeconds="bufferSeconds"
       @schedule="handleSchedule"
+      @update-buffer="({ useBuffer: u, bufferSeconds: s }) => { useBuffer = u; bufferSeconds = s }"
       @close="showScheduleModal = false"
     />
 
@@ -160,11 +172,17 @@
           No message history found for <strong>{{ unknownWarning.names.join(', ') }}</strong>, so we can't tell if they use iMessage or SMS.
         </p>
         <p>
-          If you know, you can set it using the "Unknown" label next to their name. If not, don't worry. The message will still deliver, though you may see a brief error notification while it sends.
+          If you know, you can set it using the "Unknown" label next to their name. If not, don't worry.
+          <template v-if="props.hasFda">The message will still deliver, though you may see a brief error notification while it sends.</template>
+          <template v-else>The message may not deliver if the recipient uses SMS rather than iMessage.</template>
         </p>
         <div class="unknown-warning-actions">
           <button @click="unknownWarning = null">Go Back</button>
           <button class="btn-primary" @click="unknownWarning.proceed()">Send Anyway</button>
+        </div>
+        <div class="unknown-warning-never" @click="unknownWarningNeverCheck = !unknownWarningNeverCheck">
+          <span class="round-check" :class="{ checked: unknownWarningNeverCheck }"></span>
+          <span>Don't show again</span>
         </div>
       </div>
     </div>
@@ -178,6 +196,7 @@ import AddMemberModal      from './AddMemberModal.vue'
 import AttachmentPicker    from './AttachmentPicker.vue'
 import DeleteConfirmDialog from './DeleteConfirmDialog.vue'
 import MessagePreview      from './MessagePreview.vue'
+import BufferSecondsInput  from './BufferSecondsInput.vue'
 import ScheduleModal       from './ScheduleModal.vue'
 import TokenEditor         from './TokenEditor.vue'
 
@@ -185,6 +204,7 @@ import TokenEditor         from './TokenEditor.vue'
 const props = defineProps({
   group:   { type: Object, required: true },
   members: { type: Array,  default: () => [] },
+  hasFda:  { type: Boolean, default: true },
 })
 const emit = defineEmits(['update-name', 'delete-group', 'add-member', 'remove-member', 'set-service'])
 
@@ -225,6 +245,8 @@ const knownMemberIds    = ref(new Set())
 const isSending          = ref(false)
 const sendProgress       = ref(null)
 const attachmentPaths    = ref([])
+const useBuffer          = ref(false)
+const bufferSeconds      = ref(5)
 
 // ── Computed ───────────────────────────────────────────────────────────────
 const selectedMembers = computed(() => props.members.filter(m => selectedMemberIds.value.has(m.id)))
@@ -359,11 +381,24 @@ const showToast = inject('addToast')
 
 // ── Unknown warning ────────────────────────────────────────────────────────
 const unknownWarning = ref(null)
+const neverShowUnknownWarning = ref(localStorage.getItem('neverShowUnknownWarning') === 'true')
+const unknownWarningNeverCheck = ref(false)
 
 function checkUnknownThenProceed(proceedFn) {
   const unknowns = selectedMembers.value.filter(m => !m.service_confirmed)
-  if (!unknowns.length) { proceedFn(); return }
-  unknownWarning.value = { names: unknowns.map(m => m.name), proceed: () => { unknownWarning.value = null; proceedFn() } }
+  if (!unknowns.length || neverShowUnknownWarning.value) { proceedFn(); return }
+  unknownWarningNeverCheck.value = false
+  unknownWarning.value = {
+    names: unknowns.map(m => m.name),
+    proceed: () => {
+      if (unknownWarningNeverCheck.value) {
+        neverShowUnknownWarning.value = true
+        localStorage.setItem('neverShowUnknownWarning', 'true')
+      }
+      unknownWarning.value = null
+      proceedFn()
+    }
+  }
 }
 
 // ── Send Now ───────────────────────────────────────────────────────────────
@@ -379,7 +414,8 @@ async function sendNow() {
   })
 
   try {
-    const result = await window.api.sendToGroup(props.group.id, template.value, [...selectedMemberIds.value], [...attachmentPaths.value])
+    const delaySeconds = useBuffer.value ? Math.max(1, Math.min(60, bufferSeconds.value)) : 0
+    const result = await window.api.sendToGroup(props.group.id, template.value, [...selectedMemberIds.value], [...attachmentPaths.value], delaySeconds)
 
     // Reload member badges if any contacts were auto-switched to SMS
     if (result.autoRouted?.length) {
@@ -390,10 +426,11 @@ async function sendNow() {
     if (result.failed === 0) {
       template.value = ''
       attachmentPaths.value = []
-      showToast(
-        `Sent to ${result.succeeded} ${result.succeeded === 1 ? 'person' : 'people'}`,
-        '', 'success'
-      )
+      if (result.buffered) {
+        showToast('Messages are delivering', 'Messages have started delivering and will continue to deliver with the buffer delay.', 'success', 7000)
+      } else {
+        showToast(`Sent to ${result.succeeded} ${result.succeeded === 1 ? 'person' : 'people'}`, '', 'success')
+      }
     } else if (result.succeeded === 0) {
       showToast('Send failed', 'Could not reach any recipients. Check that Messages has permission.', 'error')
     } else {
@@ -405,7 +442,7 @@ async function sendNow() {
       const noun = result.autoRouted.length === 1 ? 'contact' : 'contacts'
       showToast(
         `${result.autoRouted.length} ${noun} switched to SMS`,
-        `${result.autoRouted.join(', ')} — iMessage failed. Future sends will use SMS automatically.`,
+        `${result.autoRouted.join(', ')} — iMessage failed, sent as SMS instead. Future sends will use SMS automatically.`,
         'info', 7000
       )
     }
@@ -427,6 +464,7 @@ async function handleSchedule(info) {
 
   isSending.value = true
   try {
+    const delaySeconds = info.delaySeconds ?? 0
     const result = await window.api.createScheduledSend(
       props.group.id,
       template.value,
@@ -434,6 +472,7 @@ async function handleSchedule(info) {
       scheduleData,
       [...selectedMemberIds.value],
       [...attachmentPaths.value],
+      delaySeconds,
     )
     showScheduleModal.value = false
     template.value = ''
@@ -699,5 +738,17 @@ async function handleSchedule(info) {
   margin-top: 4px;
 }
 .unknown-warning-actions button { padding: 8px 18px; }
+
+.unknown-warning-never {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+  user-select: none;
+}
 
 </style>

@@ -1,9 +1,9 @@
 <template>
-  <div class="overlay" @click.self="$emit('close')">
+  <div class="overlay" @click.self="close">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="sched-title">
       <div class="modal-header">
         <h2 id="sched-title">Schedule Message</h2>
-        <button class="btn-close" @click="$emit('close')" title="Close">×</button>
+        <button class="btn-close" @click="close" title="Close">×</button>
       </div>
 
       <!-- Send Once / Recurring toggle -->
@@ -59,8 +59,19 @@
 
       <p v-if="isPast" class="error-msg">Please choose a time in the future.</p>
 
+      <!-- Buffer option -->
+      <div class="field">
+        <label class="field-label">Send Buffer</label>
+        <div class="buffer-row" @click="useBuffer = !useBuffer">
+          <span class="round-check" :class="{ checked: useBuffer }"></span>
+          <span>Delay between messages</span>
+          <BufferSecondsInput v-model="bufferSeconds" :disabled="!useBuffer" />
+          <span>sec</span>
+        </div>
+      </div>
+
       <div class="actions">
-        <button @click="$emit('close')">Cancel</button>
+        <button @click="close">Cancel</button>
         <button class="btn-primary" :disabled="!isValid" @click="submit">Schedule</button>
       </div>
     </div>
@@ -69,10 +80,21 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import DateTimePicker from './DateTimePicker.vue'
+import DateTimePicker     from './DateTimePicker.vue'
+import BufferSecondsInput from './BufferSecondsInput.vue'
 
-const emit = defineEmits(['schedule', 'close'])
-function onKeydown(e) { if (e.key === 'Escape') emit('close') }
+const props = defineProps({
+  initialUseBuffer:    { type: Boolean, default: false },
+  initialBufferSeconds: { type: Number,  default: 5 },
+})
+const emit = defineEmits(['schedule', 'close', 'update-buffer'])
+
+function close() {
+  emit('update-buffer', { useBuffer: useBuffer.value, bufferSeconds: bufferSeconds.value })
+  emit('close')
+}
+
+function onKeydown(e) { if (e.key === 'Escape') close() }
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
@@ -83,6 +105,8 @@ const recurringInterval = ref('daily')
 const scheduledTime     = ref('09:00')
 const weekday           = ref(new Date().getDay())
 const monthDay          = ref(new Date().getDate())
+const useBuffer         = ref(props.initialUseBuffer)
+const bufferSeconds     = ref(props.initialBufferSeconds)
 
 function ordinal(n) {
   const s = ['th','st','nd','rd']
@@ -103,13 +127,15 @@ const isValid = computed(() => {
 
 function submit() {
   if (!isValid.value) return
+  emit('update-buffer', { useBuffer: useBuffer.value, bufferSeconds: bufferSeconds.value })
   emit('schedule', {
-    type:     scheduleType.value,
-    dateTime: scheduledDateTime.value,
-    interval: recurringInterval.value,
-    time:     scheduledTime.value,
-    weekday:  weekday.value,
-    monthDay: monthDay.value,
+    type:         scheduleType.value,
+    dateTime:     scheduledDateTime.value,
+    interval:     recurringInterval.value,
+    time:         scheduledTime.value,
+    weekday:      weekday.value,
+    monthDay:     monthDay.value,
+    delaySeconds: useBuffer.value ? Math.max(1, Math.min(60, bufferSeconds.value)) : 0,
   })
 }
 </script>
@@ -224,6 +250,55 @@ function submit() {
   color: var(--error-fg, #c0392b);
   margin: -8px 0 0;
 }
+
+.buffer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  cursor: pointer;
+  user-select: none;
+}
+.round-check {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  position: relative;
+  transition: background 0.15s, border-color 0.15s;
+}
+.round-check.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.round-check.checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  width: 4px;
+  height: 7px;
+  border: 1.5px solid #fff;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+.buffer-input {
+  width: 52px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font);
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: center;
+}
+.buffer-input:focus { outline: none; border-color: var(--accent); }
+.buffer-input:disabled { opacity: 0.4; }
 
 .actions {
   display: flex;

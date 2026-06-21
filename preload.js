@@ -62,8 +62,8 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('contacts:checkCapability', members),
 
   // ── Send ──────────────────────────────────────────────────
-  sendToGroup: (groupId, templateText, memberIds, attachmentPath) =>
-    ipcRenderer.invoke('send:toGroup', groupId, templateText, memberIds, attachmentPath),
+  sendToGroup: (groupId, templateText, memberIds, attachmentPath, delaySeconds = 0) =>
+    ipcRenderer.invoke('send:toGroup', groupId, templateText, memberIds, attachmentPath, delaySeconds),
 
   onSendProgress: (callback) =>
     ipcRenderer.on('send:progress', (_event, data) => callback(data)),
@@ -86,8 +86,8 @@ contextBridge.exposeInMainWorld('api', {
   openAttachmentDialog: (maxFiles) =>
     ipcRenderer.invoke('dialog:openAttachment', maxFiles),
 
-  createScheduledSend: (groupId, templateText, scheduleType, scheduleData, memberIds, attachmentPath) =>
-    ipcRenderer.invoke('scheduling:createScheduledSend', groupId, templateText, scheduleType, scheduleData, memberIds, attachmentPath),
+  createScheduledSend: (groupId, templateText, scheduleType, scheduleData, memberIds, attachmentPath, delaySeconds = 0) =>
+    ipcRenderer.invoke('scheduling:createScheduledSend', groupId, templateText, scheduleType, scheduleData, memberIds, attachmentPath, delaySeconds),
 
   cancelScheduledSend: (id, plistId) =>
     ipcRenderer.invoke('scheduling:cancelScheduledSend', id, plistId),
@@ -104,8 +104,16 @@ contextBridge.exposeInMainWorld('api', {
   openFdaSettings: () =>
     ipcRenderer.invoke('system:openFdaSettings'),
 
+  setMacNotifs: (enabled) =>
+    ipcRenderer.send('system:setMacNotifs', enabled),
+
   onDbExternalChange: (cb) =>
     ipcRenderer.on('db:external-change', cb),
+
+  onBufferComplete: (cb) =>
+    ipcRenderer.on('buffer:complete', (_e, data) => cb(data)),
+  offBufferComplete: () =>
+    ipcRenderer.removeAllListeners('buffer:complete'),
 
   sendTextOnly: (scheduledSendId) =>
     ipcRenderer.invoke('scheduling:sendTextOnly', scheduledSendId),
@@ -124,6 +132,6 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('template:update', id, name, text, paths),
   deleteTemplate: (id) =>
     ipcRenderer.invoke('template:delete', id),
-  templateSend: (tmplId, mode, ids) =>
-    ipcRenderer.invoke('template:send', tmplId, mode, ids),
+  templateSend: (tmplId, mode, ids, delaySeconds = 0) =>
+    ipcRenderer.invoke('template:send', tmplId, mode, ids, delaySeconds),
 })

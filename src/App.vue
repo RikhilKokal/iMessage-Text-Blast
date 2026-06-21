@@ -36,6 +36,15 @@
         <button class="btn-secondary small full-width" @click="toggleTheme">
           {{ isDark ? '☀️ Light Mode' : '🌙 Dark Mode' }}
         </button>
+        <div class="notif-toggle-row">
+          <span>Mac Notifications</span>
+          <button
+            class="toggle-switch"
+            :class="{ on: macNotifs }"
+            @click="toggleMacNotifs"
+            :aria-label="macNotifs ? 'Disable Mac notifications' : 'Enable Mac notifications'"
+          ><span class="toggle-knob"></span></button>
+        </div>
         <button
           v-if="scheduledSyncPreference"
           class="btn-secondary small full-width reset-sync-pref"
@@ -66,6 +75,7 @@
         v-if="selectedGroup"
         :group="selectedGroup"
         :members="groupMembers"
+        :hasFda="!fdaBanner"
         @update-name="updateGroupName"
         @delete-group="deleteGroup"
         @add-member="addMemberToGroup"
@@ -77,6 +87,7 @@
         :template="selectedTemplate"
         :groups="groups"
         :draft="templateDrafts[selectedTemplate.id] ?? null"
+        :hasFda="!fdaBanner"
         @deleted="onTemplateDeleted"
         @updated="loadTemplates"
         @renamed="onTemplateRenamed"
@@ -183,6 +194,13 @@ import AttachmentErrorDialog from './components/AttachmentErrorDialog.vue'
 
 // ── Theme ──────────────────────────────────────────────────────────────────
 const isDark = ref(localStorage.getItem('theme') === 'dark')
+const macNotifs = ref(localStorage.getItem('macNotifs') !== 'false')
+
+function toggleMacNotifs() {
+  macNotifs.value = !macNotifs.value
+  localStorage.setItem('macNotifs', String(macNotifs.value))
+  window.api.setMacNotifs(macNotifs.value)
+}
 function applyTheme(dark) {
   document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
 }
@@ -536,6 +554,9 @@ onMounted(async () => {
   const fda = await window.api.checkFda()
   fdaBanner.value = !fda.granted
 
+  // Sync notification preference to main process
+  window.api.setMacNotifs(macNotifs.value)
+
   // Silent background sync on launch — only toasts if new contacts are found
   await syncContacts(true)
   await loadGroups()
@@ -567,10 +588,26 @@ onMounted(async () => {
         const n = result.autoRouted.length === 1 ? 'contact' : 'contacts'
         addAppToast(
           `${result.autoRouted.length} ${n} switched to SMS`,
-          `${result.autoRouted.join(', ')} — iMessage failed. Future sends will use SMS automatically.`,
+          `${result.autoRouted.join(', ')} — iMessage failed, sent as SMS instead. Future sends will use SMS automatically.`,
           'info', 7000
         )
       }
+    }
+  })
+
+  window.api.onBufferComplete(async (data) => {
+    const noun = data.succeeded === 1 ? 'message' : 'messages'
+    addAppToast('Buffered send complete', `All ${data.succeeded} ${noun} delivered.`, 'success')
+    if (data.autoRouted?.length) {
+      const n = data.autoRouted.length === 1 ? 'contact' : 'contacts'
+      addAppToast(
+        `${data.autoRouted.length} ${n} switched to SMS`,
+        `${data.autoRouted.join(', ')} — iMessage failed, sent as SMS instead. Future sends will use SMS automatically.`,
+        'info', 7000
+      )
+      // Reload the current group so the service badge updates
+      if (selectedGroupId.value) await selectGroup(selectedGroupId.value)
+      await loadGroups()
     }
   })
 
@@ -881,4 +918,39 @@ input:focus { border-color: var(--accent); }
   margin-top: -2px;
 }
 .collapsed-toast .toast-close:hover { color: var(--text); background: none; }
+
+.notif-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 2px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.toggle-switch {
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--border);
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  position: relative;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.toggle-switch.on { background: #34c759; }
+.toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  display: block;
+}
+.toggle-switch.on .toggle-knob { transform: translateX(16px); }
 </style>

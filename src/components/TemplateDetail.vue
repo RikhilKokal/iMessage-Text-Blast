@@ -127,12 +127,21 @@
             <button
               class="btn-primary"
               :disabled="selectedContactIds.size === 0 || !canSendTemplate || isSending"
-              @click="sendNow"
+              @click="checkUnknownThenProceed(sendNow)"
             >
               <template v-if="!isSending">Send Now</template>
               <template v-else-if="sendProgress">Sent {{ sendProgress.sent }} / {{ sendProgress.total }}…</template>
               <template v-else>Sending…</template>
             </button>
+          </div>
+          <div class="buffer-wrap">
+            <div class="buffer-row buffer-row--right" @click="useBuffer = !useBuffer">
+              <span class="round-check" :class="{ checked: useBuffer }"></span>
+              <span>Delay between messages</span>
+              <BufferSecondsInput v-model="bufferSeconds" :disabled="!useBuffer" />
+              <span>sec</span>
+            </div>
+            <div class="buffer-hint">max 60</div>
           </div>
         </div>
 
@@ -162,16 +171,48 @@
             <button
               class="btn-primary"
               :disabled="totalGroupContacts === 0 || !canSendTemplate || isSending"
-              @click="sendNow"
+              @click="checkUnknownThenProceed(sendNow)"
             >
               <template v-if="!isSending">Send to {{ selectedGroupIds.length }} {{ selectedGroupIds.length === 1 ? 'Group' : 'Groups' }}</template>
               <template v-else-if="sendProgress">Sent {{ sendProgress.sent }} / {{ sendProgress.total }}…</template>
               <template v-else>Sending…</template>
             </button>
           </div>
+          <div class="buffer-wrap">
+            <div class="buffer-row buffer-row--right" @click="useBuffer = !useBuffer">
+              <span class="round-check" :class="{ checked: useBuffer }"></span>
+              <span>Delay between messages</span>
+              <BufferSecondsInput v-model="bufferSeconds" :disabled="!useBuffer" />
+              <span>sec</span>
+            </div>
+            <div class="buffer-hint">max 60</div>
+          </div>
         </div>
 
       </section>
+    </div>
+
+    <!-- Unknown recipients warning -->
+    <div v-if="unknownWarning" class="overlay" @click.self="unknownWarning = null">
+      <div class="unknown-warning-box">
+        <h3>Messaging app unknown for some recipients</h3>
+        <p>
+          No message history found for <strong>{{ unknownWarning.names.join(', ') }}</strong>, so we can't tell if they use iMessage or SMS.
+        </p>
+        <p>
+          If you know, you can set it using the "Unknown" label next to their name. If not, don't worry.
+          <template v-if="props.hasFda">The message will still deliver, though you may see a brief error notification while it sends.</template>
+          <template v-else>The message may not deliver if the recipient uses SMS rather than iMessage.</template>
+        </p>
+        <div class="unknown-warning-actions">
+          <button @click="unknownWarning = null">Go Back</button>
+          <button class="btn-primary" @click="unknownWarning.proceed()">Send Anyway</button>
+        </div>
+        <div class="unknown-warning-never" @click="unknownWarningNeverCheck = !unknownWarningNeverCheck">
+          <span class="round-check" :class="{ checked: unknownWarningNeverCheck }"></span>
+          <span>Don't show again</span>
+        </div>
+      </div>
     </div>
 
     <!-- Name-before-saving dialog -->
@@ -193,14 +234,16 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, inject, onMounted, onUnmounted } from 'vue'
-import TokenEditor       from './TokenEditor.vue'
-import MessagePreview    from './MessagePreview.vue'
-import AttachmentPicker  from './AttachmentPicker.vue'
+import TokenEditor        from './TokenEditor.vue'
+import MessagePreview     from './MessagePreview.vue'
+import AttachmentPicker   from './AttachmentPicker.vue'
+import BufferSecondsInput from './BufferSecondsInput.vue'
 
 const props = defineProps({
   template: { type: Object, required: true },
   groups:   { type: Array, default: () => [] },
   draft:    { type: Object, default: null },
+  hasFda:   { type: Boolean, default: true },
 })
 const emit = defineEmits(['deleted', 'updated', 'renamed', 'draft', 'saved'])
 
@@ -327,6 +370,8 @@ async function confirmDelete() {
 // ── Send ───────────────────────────────────────────────────────────────────
 const sendMode          = ref('contacts')
 const isSending         = ref(false)
+const useBuffer         = ref(false)
+const bufferSeconds     = ref(5)
 const sendProgress      = ref(null)
 
 // Contacts tab
@@ -429,6 +474,35 @@ onUnmounted(() => {
   doSave({ showFeedback: false })
 })
 
+const unknownWarning = ref(null)
+const neverShowUnknownWarning = ref(localStorage.getItem('neverShowUnknownWarning') === 'true')
+const unknownWarningNeverCheck = ref(false)
+
+function checkUnknownThenProceed(proceedFn) {
+  const mode = sendMode.value
+  let unknowns = []
+  if (mode === 'contacts') {
+    unknowns = selectedContactObjects.value.filter(c => !c.service_confirmed)
+  } else {
+    unknowns = selectedGroupIds.value
+      .flatMap(id => groupMembersCache.value[id] || [])
+      .filter(m => !m.service_confirmed)
+  }
+  if (!unknowns.length || neverShowUnknownWarning.value) { proceedFn(); return }
+  unknownWarningNeverCheck.value = false
+  unknownWarning.value = {
+    names: [...new Set(unknowns.map(m => m.name))],
+    proceed: () => {
+      if (unknownWarningNeverCheck.value) {
+        neverShowUnknownWarning.value = true
+        localStorage.setItem('neverShowUnknownWarning', 'true')
+      }
+      unknownWarning.value = null
+      proceedFn()
+    }
+  }
+}
+
 async function sendNow() {
   if (isSending.value) return
   isSending.value = true
@@ -444,11 +518,17 @@ async function sendNow() {
     // Auto-save current body/attachments before sending so the outgoing text is up-to-date
     await doSave({ showFeedback: false })
 
+    const delaySeconds = useBuffer.value ? Math.max(1, Math.min(60, bufferSeconds.value)) : 0
+
     if (mode === 'contacts') {
       const ids = contactIds
-      const result = await window.api.templateSend(props.template.id, 'contacts', ids)
+      const result = await window.api.templateSend(props.template.id, 'contacts', ids, delaySeconds)
       if (result.failed === 0) {
-        showToast(`Sent to ${result.succeeded} ${result.succeeded === 1 ? 'person' : 'people'}`, '', 'success')
+        if (result.buffered) {
+          showToast('Messages are delivering', 'Messages have started delivering and will continue to deliver with the buffer delay.', 'success', 7000)
+        } else {
+          showToast(`Sent to ${result.succeeded} ${result.succeeded === 1 ? 'person' : 'people'}`, '', 'success')
+        }
         selectedContactIds.value = new Set()
         contactSearch.value = ''
       } else if (result.succeeded === 0) {
@@ -457,14 +537,19 @@ async function sendNow() {
         showToast(`Sent ${result.succeeded}, failed ${result.failed}`, '', 'error')
       }
     } else {
-      const result = await window.api.templateSend(props.template.id, 'groups', groupIds)
-      const total = result.results.reduce((sum, r) => sum + r.succeeded, 0)
-      const failed = result.results.reduce((sum, r) => sum + r.failed, 0)
-      if (failed === 0) {
-        showToast(`Sent to ${result.results.length} ${result.results.length === 1 ? 'group' : 'groups'}`, `${total} messages delivered.`, 'success')
+      const result = await window.api.templateSend(props.template.id, 'groups', groupIds, delaySeconds)
+      if (result.buffered) {
+        showToast('Messages are delivering', 'Messages have started delivering and will continue to deliver with the buffer delay.', 'success', 7000)
         selectedGroupIds.value = []
       } else {
-        showToast(`Sent with errors`, `${total} delivered, ${failed} failed.`, 'error')
+        const total = result.results.reduce((sum, r) => sum + r.succeeded, 0)
+        const failed = result.results.reduce((sum, r) => sum + r.failed, 0)
+        if (failed === 0) {
+          showToast(`Sent to ${result.results.length} ${result.results.length === 1 ? 'group' : 'groups'}`, `${total} messages delivered.`, 'success')
+          selectedGroupIds.value = []
+        } else {
+          showToast(`Sent with errors`, `${total} delivered, ${failed} failed.`, 'error')
+        }
       }
     }
   } catch (err) {
@@ -798,4 +883,35 @@ async function sendNow() {
   font-family: var(--font);
 }
 .btn-secondary:hover { background: var(--bg); }
+
+.unknown-warning-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px 28px 20px;
+  max-width: 420px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.unknown-warning-box h3 { font-size: 16px; font-weight: 700; margin: 0; }
+.unknown-warning-box p  { font-size: 13px; line-height: 1.55; margin: 0; color: var(--text); }
+.unknown-warning-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.unknown-warning-actions button { padding: 8px 18px; }
+.unknown-warning-never {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+  user-select: none;
+}
 </style>

@@ -164,3 +164,75 @@
 /* ── Send info ───────────────────────────────────────────────────────────── */
 .send-info { font-size: 13px; color: var(--text-2); }
 .send-info strong { color: var(--text); font-weight: 600; }
+
+/* ── Send buffer ─────────────────────────────────────────────────────────── */
+.buffer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 8px;
+}
+.buffer-row--right {
+  justify-content: flex-end;
+  margin-bottom: 0;
+  margin-top: -12px;
+}
+.buffer-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-top: -12px;
+}
+.buffer-wrap .buffer-row--right {
+  margin-top: 0;
+}
+.buffer-hint {
+  font-size: 10px;
+  color: var(--text-2);
+  opacity: 0.6;
+  margin-top: 2px;
+  margin-bottom: 12px;
+}
+.round-check {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  position: relative;
+  transition: background 0.15s, border-color 0.15s;
+}
+.round-check.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.round-check.checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  width: 4px;
+  height: 7px;
+  border: 1.5px solid #fff;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+.buffer-input {
+  width: 52px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font);
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: center;
+}
+.buffer-input:focus { outline: none; border-color: var(--accent); }
+.buffer-input:disabled { opacity: 0.4; }

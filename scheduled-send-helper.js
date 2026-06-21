@@ -111,7 +111,7 @@ async function main() {
 
   // 1. Load scheduled send record
   const schedRows = dbSelect(
-    `SELECT id, group_id, template_text, schedule_type, schedule_interval, member_ids, attachment_path
+    `SELECT id, group_id, template_text, schedule_type, schedule_interval, member_ids, attachment_path, delay_seconds
      FROM scheduled_sends
      WHERE launchd_plist_id = '${plistId.replace(/'/g, "''")}' AND is_active = 1
      LIMIT 1`
@@ -122,7 +122,7 @@ async function main() {
     process.exit(0)
   }
 
-  const [schedId, groupId, templateText, scheduleType, scheduleInterval, memberIdsJson, attachmentPathRaw] = schedRows[0]
+  const [schedId, groupId, templateText, scheduleType, scheduleInterval, memberIdsJson, attachmentPathRaw, delaySecondsRaw] = schedRows[0]
   let attachmentPath = null
   try { attachmentPath = attachmentPathRaw ? JSON.parse(attachmentPathRaw) : null } catch { attachmentPath = attachmentPathRaw ? [attachmentPathRaw] : null }
   console.log(`[Helper] Scheduled send id=${schedId} for group=${groupId}`)
@@ -192,7 +192,8 @@ async function main() {
   }
 
   // 4. Send — sendCore handles Messages.app launch, template rendering, polling, SMS fallback
-  const { succeeded, failed } = await core.sendToGroup(members, templateText, chatDbQuery, { attachmentPath: attachmentPath || null })
+  const delaySeconds = Number(delaySecondsRaw) || 0
+  const { succeeded, failed } = await core.sendToGroup(members, templateText, chatDbQuery, { attachmentPath: attachmentPath || null, delaySeconds })
 
   // 5. Persist preferred_service=SMS for auto-routed contacts
   for (const s of succeeded) {

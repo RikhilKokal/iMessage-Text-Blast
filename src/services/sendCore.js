@@ -254,7 +254,9 @@ function renderTemplate(template, contact) {
     .replace(/⟦nickname⟧/g,  contact.nickname || firstName)
 }
 
-// ── Bulk send ─────────────────────────────────────────────────────────────────
+// ── Buffered bulk send sentinel path ─────────────────────────────────────────
+
+const BUFFER_DONE_PATH = path.join(os.homedir(), '.imsg-buffer-done.json')
 
 /**
  * Send a templated message to a list of members.
@@ -263,14 +265,16 @@ function renderTemplate(template, contact) {
  * @param {string}   templateText
  * @param {Function} chatDbQuery — injected DB access for delivery polling
  * @param {object}   [opts]
- * @param {Function} [opts.onProgress] — callback({ sent, failed, total, name, via })
+ * @param {Function} [opts.onProgress]   — callback({ sent, failed, total, name, via })
+ * @param {number}   [opts.delaySeconds] — seconds between each message (0 = no delay)
  */
-async function sendToGroup(members, templateText, chatDbQuery, { onProgress, attachmentPath } = {}) {
+async function sendToGroup(members, templateText, chatDbQuery, { onProgress, attachmentPath, delaySeconds = 0 } = {}) {
   const succeeded = []
   const failed    = []
   const total     = members.length
 
-  for (const member of members) {
+  for (let i = 0; i < members.length; i++) {
+    const member  = members[i]
     const message = renderTemplate(templateText, member)
     const service = member.service === 'SMS' ? 'SMS' : 'iMessage'
     const result  = await sendMessage(member.phone, message, service, chatDbQuery, attachmentPath)
@@ -286,6 +290,10 @@ async function sendToGroup(members, templateText, chatDbQuery, { onProgress, att
 
     if (onProgress) {
       onProgress({ sent: succeeded.length, failed: failed.length, total, name: member.name, via: result.via })
+    }
+
+    if (delaySeconds > 0 && i < members.length - 1) {
+      await sleep(delaySeconds * 1000)
     }
   }
 
@@ -350,4 +358,4 @@ INSERT INTO send_history_recipients (send_history_id, name, phone, received) VAL
   ${rows.join(',\n  ')};`
 }
 
-module.exports = { sendToGroup, sendMessage, renderTemplate, normalisePhone, buildSendHistorySQL }
+module.exports = { sendToGroup, sendMessage, renderTemplate, normalisePhone, buildSendHistorySQL, BUFFER_DONE_PATH }
