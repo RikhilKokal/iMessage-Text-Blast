@@ -513,7 +513,7 @@ ipcMain.handle('scheduling:sendTextOnly', async (_e, scheduledSendId) => {
 
 // ── App lifecycle ────────────────────────────────────────────────────────────
 
-app.setAppUserModelId('com.imessage.bulk-scheduler')
+app.setAppUserModelId('com.imessage.text-blast')
 
 app.whenReady().then(() => {
   // Init DB synchronously before window opens so tables exist

@@ -1,5 +1,5 @@
 {
-  "name": "imessage-bulk-scheduler",
+  "name": "imessage-text-blast",
   "version": "1.0.0",
   "description": "Send personalized iMessages to groups of contacts on a schedule",
   "main": "index.js",
@@ -25,9 +25,25 @@
     "wait-on": "^7.2.0"
   },
   "build": {
-    "appId": "com.imessage.bulk-scheduler",
+    "appId": "com.imessage.text-blast",
+    "productName": "iMessage Text Blast",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "index.js",
+      "preload.js",
+      "buffer-send-helper.js",
+      "scheduled-send-helper.js",
+      "db/**/*",
+      "src/services/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
     "mac": {
       "category": "public.app-category.productivity",
+      "icon": "build/icon.icns",
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
