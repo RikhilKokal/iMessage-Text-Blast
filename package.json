@@ -1,11 +1,12 @@
 {
   "name": "imessage-text-blast",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Send personalized iMessages to groups of contacts on a schedule",
   "main": "index.js",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "build": "vite build && electron-builder",
+    "compile-swift": "mkdir -p resources && SDK=$(xcrun --sdk macosx --show-sdk-path) && swiftc -target arm64-apple-macos11.0 -sdk \"$SDK\" src/swift/contacts_sync.swift -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker src/swift/Info.plist -o resources/contacts_sync_arm64 && swiftc -target x86_64-apple-macos11.0 -sdk \"$SDK\" src/swift/contacts_sync.swift -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker src/swift/Info.plist -o resources/contacts_sync_x86_64 && lipo -create resources/contacts_sync_arm64 resources/contacts_sync_x86_64 -output resources/contacts_sync && rm resources/contacts_sync_arm64 resources/contacts_sync_x86_64",
+    "build": "npm run compile-swift && vite build && electron-builder --mac --arm64 && electron-builder --mac --x64 && CXXFLAGS='-std=c++20' electron-rebuild -f -w better-sqlite3",
     "electron": "electron .",
     "vite": "vite",
     "postinstall": "CXXFLAGS='-std=c++20' electron-rebuild -f -w better-sqlite3"
@@ -27,27 +28,39 @@
   "build": {
     "appId": "com.imessage.text-blast",
     "productName": "iMessage Text Blast",
-    "directories": {
-      "output": "release"
-    },
     "files": [
-      "dist/**/*",
+      "dist/index.html",
+      "dist/assets/**/*",
       "index.js",
       "preload.js",
       "buffer-send-helper.js",
       "scheduled-send-helper.js",
       "db/**/*",
       "src/services/**/*",
-      "node_modules/**/*",
-      "package.json"
+      "src/shared/**/*",
+      "node_modules/**/*"
+    ],
+    "asarUnpack": [
+      "buffer-send-helper.js",
+      "scheduled-send-helper.js",
+      "src/services/sendCore.js",
+      "src/services/sqliteCliAdapter.js",
+      "node_modules/better-sqlite3/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/contacts_sync",
+        "to": "contacts_sync"
+      }
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "icon": "build/icon.icns",
+      "minimumSystemVersion": "11.0",
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
-        "NSUserNotificationAlertStyle": "alert"
+        "NSUserNotificationAlertStyle": "alert",
+        "NSContactsUsageDescription": "iMessage Text Blast needs access to your Contacts to import recipients and personalize messages."
       }
     }
   }

@@ -17,7 +17,6 @@
 const path = require('path')
 const os   = require('os')
 const fs   = require('fs')
-const { execSync } = require('child_process')
 
 const plistId = process.argv[2]
 if (!plistId) {
@@ -30,34 +29,12 @@ const CHAT_DB_PATH = path.join(os.homedir(), 'Library', 'Messages', 'chat.db')
 
 // ── SQLite CLI helpers ────────────────────────────────────────────────────────
 
-function dbSelect(sql, dbPath = DB_PATH) {
-  const tmpSql = path.join(os.tmpdir(), `imsg-helper-${Date.now()}.sql`)
-  fs.writeFileSync(tmpSql, sql, 'utf8')
-  try {
-    const out = execSync(
-      `sqlite3 -separator $'\\t' "${dbPath}" < "${tmpSql}"`,
-      { shell: '/bin/bash', timeout: 10000 }
-    ).toString().trim()
-    if (!out) return []
-    return out.split('\n').map(row => row.split('\t'))
-  } catch (err) {
-    throw new Error(`sqlite3 query failed: ${err.stderr?.toString() || err.message}`)
-  } finally {
-    try { fs.unlinkSync(tmpSql) } catch (_) {}
-  }
-}
-
-function dbExec(sql) {
-  const tmpSql = path.join(os.tmpdir(), `imsg-helper-exec-${Date.now()}.sql`)
-  fs.writeFileSync(tmpSql, sql, 'utf8')
-  try {
-    execSync(`sqlite3 "${DB_PATH}" < "${tmpSql}"`, { shell: '/bin/bash', timeout: 10000 })
-  } catch (err) {
-    throw new Error(`sqlite3 exec failed: ${err.stderr?.toString() || err.message}`)
-  } finally {
-    try { fs.unlinkSync(tmpSql) } catch (_) {}
-  }
-}
+const { createSqliteCliAdapter } = require('./src/services/sqliteCliAdapter')
+const { dbSelect, dbExec } = createSqliteCliAdapter({
+  selectTmpPrefix: 'imsg-helper',
+  execTmpPrefix:   'imsg-helper-exec',
+  execDbPath:      DB_PATH,
+})
 
 // Adapter: chatDbQuery for sendCore — uses the sqlite3 CLI against chat.db
 function chatDbQuery(sql) {
@@ -67,42 +44,6 @@ function chatDbQuery(sql) {
 // ── sendCore ──────────────────────────────────────────────────────────────────
 
 const core = require('./src/services/sendCore')
-
-// ── Next-run calculator (mirrors schedulingService.js) ────────────────────────
-
-function calculateNextRun(scheduleData) {
-  const { interval, time, weekday, monthDay } = scheduleData
-  const [hours, minutes] = (time || '09:00').split(':').map(Number)
-  const now = new Date()
-
-  if (interval === 'daily') {
-    const nextRun = new Date(now)
-    nextRun.setHours(hours, minutes, 0, 0)
-    if (nextRun <= now) nextRun.setDate(nextRun.getDate() + 1)
-    return nextRun
-  }
-
-  if (interval === 'weekly') {
-    const targetDay = weekday ?? now.getDay()
-    const nextRun = new Date(now)
-    nextRun.setHours(hours, minutes, 0, 0)
-    let daysAhead = (targetDay - now.getDay() + 7) % 7
-    if (daysAhead === 0 && nextRun <= now) daysAhead = 7
-    nextRun.setDate(now.getDate() + daysAhead)
-    return nextRun
-  }
-
-  if (interval === 'monthly') {
-    const targetDate = monthDay ?? now.getDate()
-    const nextRun = new Date(now)
-    nextRun.setDate(targetDate)
-    nextRun.setHours(hours, minutes, 0, 0)
-    if (nextRun <= now) nextRun.setMonth(nextRun.getMonth() + 1)
-    return nextRun
-  }
-
-  throw new Error(`Unknown interval: ${interval}`)
-}
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -114,7 +55,8 @@ async function main() {
     `SELECT id, group_id, template_text, schedule_type, schedule_interval, member_ids, attachment_path, delay_seconds
      FROM scheduled_sends
      WHERE launchd_plist_id = '${plistId.replace(/'/g, "''")}' AND is_active = 1
-     LIMIT 1`
+     LIMIT 1`,
+    DB_PATH
   )
 
   if (!schedRows.length) {
@@ -133,7 +75,8 @@ async function main() {
      FROM contacts c
      JOIN group_members gm ON c.id = gm.contact_id
      WHERE gm.group_id = ${groupId}
-     ORDER BY c.name ASC`
+     ORDER BY c.name ASC`,
+    DB_PATH
   )
 
   if (!allMemberRows.length) {
@@ -164,7 +107,7 @@ async function main() {
     const missing = attachmentPath.filter(p => !fs.existsSync(p))
     if (missing.length > 0) {
       console.log(`[Helper] ${missing.length} attachment(s) missing — aborting send`)
-      const groupNameRow = dbSelect(`SELECT name FROM groups WHERE id = ${groupId} LIMIT 1`)[0]
+      const groupNameRow = dbSelect(`SELECT name FROM groups WHERE id = ${groupId} LIMIT 1`, DB_PATH)[0]
       const groupName = groupNameRow?.[0] ?? 'Unknown Group'
       const errorEntry = {
         isError: true,
@@ -220,7 +163,7 @@ async function main() {
 
   // Signal the Electron app to refresh (watched by the main process).
   // Write result data so the app can show a toast.
-  const groupNameRow = dbSelect(`SELECT name FROM groups WHERE id = ${groupId} LIMIT 1`)[0]
+  const groupNameRow = dbSelect(`SELECT name FROM groups WHERE id = ${groupId} LIMIT 1`, DB_PATH)[0]
   const groupName    = groupNameRow?.[0] ?? 'Unknown Group'
   const autoRoutedNames = succeeded.filter(s => s.autoRouted).map(s => s.name)
   fs.writeFileSync(sentinelPath, JSON.stringify({
@@ -236,7 +179,7 @@ async function main() {
   // 7. Update scheduled_sends record
   if (scheduleType === 'recurring') {
     const scheduleData = JSON.parse(scheduleInterval)
-    const nextRun = calculateNextRun(scheduleData)
+    const nextRun = core.calculateNextRun('recurring', scheduleData)
     dbExec(`UPDATE scheduled_sends SET next_run = '${nextRun.toISOString()}' WHERE id = ${schedId};`)
     console.log(`[Helper] Next run for recurring: ${nextRun.toLocaleString()}`)
   } else {

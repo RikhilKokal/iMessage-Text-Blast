@@ -1,23 +1,17 @@
 <template>
-  <div class="overlay" @click.self="$emit('close')">
-    <div class="panel">
+  <DashboardPanel title="Send History" width="720px" @close="$emit('close')">
+    <template #header-actions>
+      <input
+        v-model="searchQuery"
+        type="text"
+        placeholder="Filter by group…"
+        class="search-input"
+      />
+      <button class="btn-trash" @click="confirmClear = true" title="Clear history"><span class="trash-icon">🗑</span></button>
+    </template>
 
-      <div class="panel-header">
-        <h2>Send History</h2>
-        <div class="header-right">
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="Filter by group…"
-            class="search-input"
-          />
-          <button class="btn-trash" @click="confirmClear = true" title="Clear history"><span class="trash-icon">🗑</span></button>
-          <button class="btn-close" @click="$emit('close')" title="Close">×</button>
-        </div>
-      </div>
-
-      <div class="panel-body">
-        <div v-if="filteredHistory.length > 0" class="sends-list">
+    <template #default>
+      <div v-if="filteredHistory.length > 0" class="sends-list">
           <div
             v-for="send in filteredHistory"
             :key="send.id"
@@ -57,10 +51,9 @@
           </div>
         </div>
         <div v-else class="empty">No send history yet.</div>
-      </div>
+    </template>
 
-    </div>
-
+    <template #popups>
     <!-- Recipients popup -->
     <div v-if="recipientsPopup" class="confirm-overlay" @click.self="recipientsPopup = null">
       <div class="confirm-box recipients-box">
@@ -120,11 +113,13 @@
         </div>
       </div>
     </div>
-  </div>
+    </template>
+  </DashboardPanel>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import DashboardPanel from './DashboardPanel.vue'
 
 defineEmits(['close'])
 
@@ -216,41 +211,6 @@ function statusLabel(status) {
 </script>
 
 <style scoped>
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(2px);
-}
-
-.panel {
-  background: var(--surface);
-  border-radius: 12px;
-  width: min(720px, calc(100vw - 48px));
-  max-height: calc(100vh - 80px);
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
-  overflow: hidden;
-}
-
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
-  flex-shrink: 0;
-}
-.panel-header h2 { font-size: 17px; font-weight: 700; }
-
-.header-right { display: flex; align-items: center; gap: 10px; }
-
 .search-input {
   padding: 6px 10px;
   border: 1px solid var(--border);
@@ -271,18 +231,6 @@ function statusLabel(status) {
 }
 .btn-trash:hover { background: var(--danger); }
 .btn-trash:hover .trash-icon { filter: brightness(0) invert(1); }
-
-.btn-close {
-  width: 28px; height: 28px;
-  border-radius: 50%;
-  border: none;
-  background: var(--border);
-  color: var(--text);
-  font-size: 18px;
-  display: flex; align-items: center; justify-content: center;
-  padding: 0; cursor: pointer; flex-shrink: 0;
-}
-.btn-close:hover { background: var(--text-2); color: #fff; }
 
 .confirm-overlay {
   position: fixed;
@@ -308,12 +256,6 @@ function statusLabel(status) {
 .confirm-actions button { padding: 7px 16px; }
 .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
 .btn-danger:hover { opacity: 0.85; }
-
-.panel-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px 24px;
-}
 
 .sends-list { display: flex; flex-direction: column; gap: 8px; }
 

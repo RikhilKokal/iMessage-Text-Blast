@@ -1,0 +1,1739 @@
+diff --git a/node_modules/node-mac-contacts/bin/darwin-arm64-121/node-mac-contacts.node b/node_modules/node-mac-contacts/bin/darwin-arm64-121/node-mac-contacts.node
+new file mode 100755
+index 0000000..d21d61a
+Binary files /dev/null and b/node_modules/node-mac-contacts/bin/darwin-arm64-121/node-mac-contacts.node differ
+diff --git a/node_modules/node-mac-contacts/build/Makefile b/node_modules/node-mac-contacts/build/Makefile
+index c73124a..3a61729 100644
+--- a/node_modules/node-mac-contacts/build/Makefile
++++ b/node_modules/node-mac-contacts/build/Makefile
+@@ -148,10 +148,10 @@ cmd_pch_mm = $(CC.$(TOOLSET)) $(GYP_PCH_OBJCXXFLAGS) $(DEPFLAGS) -c -o $@ $<
+ # Use $(4) for the command, since $(2) and $(3) are used as flag by do_cmd
+ # already.
+ quiet_cmd_mac_tool = MACTOOL $(4) $<
+-cmd_mac_tool = /Library/Developer/CommandLineTools/usr/bin/python3 gyp-mac-tool $(4) $< "$@"
++cmd_mac_tool = ./gyp-mac-tool $(4) $< "$@"
+ 
+ quiet_cmd_mac_package_framework = PACKAGE FRAMEWORK $@
+-cmd_mac_package_framework = /Library/Developer/CommandLineTools/usr/bin/python3 gyp-mac-tool package-framework "$@" $(4)
++cmd_mac_package_framework = ./gyp-mac-tool package-framework "$@" $(4)
+ 
+ quiet_cmd_infoplist = INFOPLIST $@
+ cmd_infoplist = $(CC.$(TOOLSET)) -E -P -Wno-trigraphs -x c $(INFOPLIST_DEFINES) "$<" -o "$@"
+@@ -167,7 +167,7 @@ quiet_cmd_symlink = SYMLINK $@
+ cmd_symlink = ln -sf "$<" "$@"
+ 
+ quiet_cmd_alink = LIBTOOL-STATIC $@
+-cmd_alink = rm -f $@ && /Library/Developer/CommandLineTools/usr/bin/python3 gyp-mac-tool filter-libtool libtool $(GYP_LIBTOOLFLAGS) -static -o $@ $(filter %.o,$^)
++cmd_alink = rm -f $@ && ./gyp-mac-tool filter-libtool libtool $(GYP_LIBTOOLFLAGS) -static -o $@ $(filter %.o,$^)
+ 
+ quiet_cmd_link = LINK($(TOOLSET)) $@
+ cmd_link = $(LINK.$(TOOLSET)) $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -o "$@" $(LD_INPUTS) $(LIBS)
+@@ -326,18 +326,18 @@ $(obj).$(TOOLSET)/%.o: $(obj)/%.S FORCE_DO_CMD
+ 
+ ifeq ($(strip $(foreach prefix,$(NO_LOAD),\
+     $(findstring $(join ^,$(prefix)),\
+-                 $(join ^,../node-addon-api/nothing.target.mk)))),)
+-  include ../node-addon-api/nothing.target.mk
++                 $(join ^,contacts.target.mk)))),)
++  include contacts.target.mk
+ endif
+ ifeq ($(strip $(foreach prefix,$(NO_LOAD),\
+     $(findstring $(join ^,$(prefix)),\
+-                 $(join ^,contacts.target.mk)))),)
+-  include contacts.target.mk
++                 $(join ^,node_modules/node-addon-api/nothing.target.mk)))),)
++  include node_modules/node-addon-api/nothing.target.mk
+ endif
+ 
+ quiet_cmd_regen_makefile = ACTION Regenerating $@
+-cmd_regen_makefile = cd $(srcdir); /usr/local/lib/node_modules/npm/node_modules/node-gyp/gyp/gyp_main.py -fmake --ignore-environment "-Dlibrary=shared_library" "-Dvisibility=default" "-Dnode_root_dir=/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0" "-Dnode_gyp_dir=/usr/local/lib/node_modules/npm/node_modules/node-gyp" "-Dnode_lib_file=/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/<(target_arch)/node.lib" "-Dmodule_root_dir=/private/var/folders/fc/b11l_jdx7x94lqvfrzck7nvh0000gn/T/tmp-83683-3kI6CBv1WR8T/node_modules/node-mac-contacts" "-Dnode_engine=v8" "--depth=." "-Goutput_dir=." "--generator-output=build" -I/private/var/folders/fc/b11l_jdx7x94lqvfrzck7nvh0000gn/T/tmp-83683-3kI6CBv1WR8T/node_modules/node-mac-contacts/build/config.gypi -I/usr/local/lib/node_modules/npm/node_modules/node-gyp/addon.gypi -I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/common.gypi "--toplevel-dir=." binding.gyp
+-Makefile: $(srcdir)/../../../../../../../../../Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/common.gypi $(srcdir)/../../../../../../../../../usr/local/lib/node_modules/npm/node_modules/node-gyp/addon.gypi $(srcdir)/../node-addon-api/node_api.gyp $(srcdir)/binding.gyp $(srcdir)/build/config.gypi
++cmd_regen_makefile = cd $(srcdir); /Users/rikhilkokal/Documents/Personal/Productive/Programming/iMessage-Text-Blast/node_modules/@electron/node-gyp/gyp/gyp_main.py -fmake --ignore-environment "-Dlibrary=shared_library" "-Dvisibility=default" "-Dnode_root_dir=/Users/rikhilkokal/.electron-gyp/29.4.6" "-Dnode_gyp_dir=/Users/rikhilkokal/Documents/Personal/Productive/Programming/iMessage-Text-Blast/node_modules/@electron/node-gyp" "-Dnode_lib_file=/Users/rikhilkokal/.electron-gyp/29.4.6/<(target_arch)/node.lib" "-Dmodule_root_dir=/Users/rikhilkokal/Documents/Personal/Productive/Programming/iMessage-Text-Blast/node_modules/node-mac-contacts" "-Dnode_engine=v8" "--depth=." "-Goutput_dir=." "--generator-output=build" -I/Users/rikhilkokal/Documents/Personal/Productive/Programming/iMessage-Text-Blast/node_modules/node-mac-contacts/build/config.gypi -I/Users/rikhilkokal/Documents/Personal/Productive/Programming/iMessage-Text-Blast/node_modules/@electron/node-gyp/addon.gypi -I/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/common.gypi "--toplevel-dir=." binding.gyp
++Makefile: $(srcdir)/../../../../../../../.electron-gyp/29.4.6/include/node/common.gypi $(srcdir)/binding.gyp $(srcdir)/build/config.gypi $(srcdir)/../@electron/node-gyp/addon.gypi $(srcdir)/node_modules/node-addon-api/node_api.gyp
+ 	$(call do_cmd,regen_makefile)
+ 
+ # "all" is a concatenation of the "all" targets from all the included
+diff --git a/node_modules/node-mac-contacts/build/Release/.deps/Release/contacts.node.d b/node_modules/node-mac-contacts/build/Release/.deps/Release/contacts.node.d
+index f07e7fc..06ee4d4 100644
+--- a/node_modules/node-mac-contacts/build/Release/.deps/Release/contacts.node.d
++++ b/node_modules/node-mac-contacts/build/Release/.deps/Release/contacts.node.d
+@@ -1 +1 @@
+-cmd_Release/contacts.node := c++ -bundle -framework CoreFoundation -framework AppKit -framework Contacts -undefined dynamic_lookup -Wl,-search_paths_first -mmacosx-version-min=13.5 -arch arm64 -L./Release -stdlib=libc++  -o Release/contacts.node Release/obj.target/contacts/contacts.o Release/nothing.a 
++cmd_Release/contacts.node := c++ -bundle -framework CoreFoundation -framework AppKit -framework Contacts -undefined dynamic_lookup -Wl,-search_paths_first -mmacosx-version-min=10.15 -arch arm64 -L./Release -stdlib=libc++  -o Release/contacts.node Release/obj.target/contacts/contacts.o Release/nothing.a 
+diff --git a/node_modules/node-mac-contacts/build/Release/.deps/Release/nothing.a.d b/node_modules/node-mac-contacts/build/Release/.deps/Release/nothing.a.d
+index 49fd21a..8197f15 100644
+--- a/node_modules/node-mac-contacts/build/Release/.deps/Release/nothing.a.d
++++ b/node_modules/node-mac-contacts/build/Release/.deps/Release/nothing.a.d
+@@ -1 +1 @@
+-cmd_Release/nothing.a := rm -f Release/nothing.a && /Library/Developer/CommandLineTools/usr/bin/python3 gyp-mac-tool filter-libtool libtool  -static -o Release/nothing.a Release/obj.target/nothing/../node-addon-api/nothing.o
++cmd_Release/nothing.a := rm -f Release/nothing.a && ./gyp-mac-tool filter-libtool libtool  -static -o Release/nothing.a Release/obj.target/nothing/node_modules/node-addon-api/nothing.o
+diff --git a/node_modules/node-mac-contacts/build/Release/.deps/Release/obj.target/contacts/contacts.o.d b/node_modules/node-mac-contacts/build/Release/.deps/Release/obj.target/contacts/contacts.o.d
+index e4afce9..7084c55 100644
+--- a/node_modules/node-mac-contacts/build/Release/.deps/Release/obj.target/contacts/contacts.o.d
++++ b/node_modules/node-mac-contacts/build/Release/.deps/Release/obj.target/contacts/contacts.o.d
+@@ -1,131 +1,121 @@
+-cmd_Release/obj.target/contacts/contacts.o := c++ '-DNODE_GYP_MODULE_NAME=contacts' '-DUSING_UV_SHARED=1' '-DUSING_V8_SHARED=1' '-DV8_DEPRECATION_WARNINGS=1' '-D_GLIBCXX_USE_CXX11_ABI=1' '-D_FILE_OFFSET_BITS=64' '-D_DARWIN_USE_64_BIT_INODE=1' '-D_LARGEFILE_SOURCE' '-DOPENSSL_NO_PINSHARED' '-DOPENSSL_THREADS' '-DNAPI_DISABLE_CPP_EXCEPTIONS' '-DBUILDING_NODE_EXTENSION' -I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node -I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/src -I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/openssl/config -I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/openssl/openssl/include -I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/uv/include -I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/zlib -I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/v8/include -I/private/var/folders/fc/b11l_jdx7x94lqvfrzck7nvh0000gn/T/tmp-83683-3kI6CBv1WR8T/node_modules/node-addon-api  -O3 -gdwarf-2 -fno-strict-aliasing -mmacosx-version-min=13.5 -arch arm64 -Wall -Wendif-labels -W -Wno-unused-parameter -std=gnu++20 -stdlib=libc++ -fno-rtti -fno-exceptions -std=c++20 -stdlib=libc++ -mmacosx-version-min=10.12  -MMD -MF ./Release/.deps/Release/obj.target/contacts/contacts.o.d.raw -c -o Release/obj.target/contacts/contacts.o ../contacts.mm
++cmd_Release/obj.target/contacts/contacts.o := c++ '-DNODE_GYP_MODULE_NAME=contacts' '-DUSING_UV_SHARED=1' '-DUSING_V8_SHARED=1' '-DV8_DEPRECATION_WARNINGS=1' '-DV8_DEPRECATION_WARNINGS' '-DV8_IMMINENT_DEPRECATION_WARNINGS' '-D_GLIBCXX_USE_CXX11_ABI=1' '-DELECTRON_ENSURE_CONFIG_GYPI' '-D_DARWIN_USE_64_BIT_INODE=1' '-D_LARGEFILE_SOURCE' '-D_FILE_OFFSET_BITS=64' '-DUSING_ELECTRON_CONFIG_GYPI' '-DV8_COMPRESS_POINTERS' '-DV8_COMPRESS_POINTERS_IN_SHARED_CAGE' '-DV8_ENABLE_SANDBOX' '-DV8_31BIT_SMIS_ON_64BIT_ARCH' '-DOPENSSL_NO_PINSHARED' '-DOPENSSL_THREADS' '-DOPENSSL_NO_ASM' '-DNAPI_DISABLE_CPP_EXCEPTIONS' '-DBUILDING_NODE_EXTENSION' -I/Users/rikhilkokal/.electron-gyp/29.4.6/include/node -I/Users/rikhilkokal/.electron-gyp/29.4.6/src -I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/openssl/config -I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/openssl/openssl/include -I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/uv/include -I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/zlib -I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/v8/include -I/Users/rikhilkokal/Documents/Personal/Productive/Programming/iMessage-Text-Blast/node_modules/node-mac-contacts/node_modules/node-addon-api  -O3 -gdwarf-2 -mmacosx-version-min=10.15 -arch arm64 -Wall -Wendif-labels -W -Wno-unused-parameter -std=gnu++17 -stdlib=libc++ -fno-rtti -fno-exceptions -std=c++20 -stdlib=libc++ -mmacosx-version-min=10.12  -MMD -MF ./Release/.deps/Release/obj.target/contacts/contacts.o.d.raw -c -o Release/obj.target/contacts/contacts.o ../contacts.mm
+ Release/obj.target/contacts/contacts.o: ../contacts.mm \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/node.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/cppgc/common.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8config.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-array-buffer.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-local-handle.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-handle-base.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-internal.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-memory-span.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-object.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-maybe.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/cppgc/internal/conditional-stack-allocated.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/cppgc/macros.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/cppgc/internal/compiler-specific.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/cppgc/type-traits.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-persistent-handle.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-weak-callback-info.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-primitive.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-data.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-value.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-sandbox.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-traced-handle.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-platform.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-source-location.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-container.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-context.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-snapshot.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-isolate.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-callbacks.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-promise.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-debug.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-script.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-message.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-embedder-heap.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-exception.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-function-callback.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-microtask.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-statistics.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-unwinder.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-embedder-state-scope.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-date.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-extension.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-external.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-function.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-template.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-initialization.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-json.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-locker.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-microtask-queue.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-primitive-object.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-proxy.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-regexp.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-typed-array.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-value-serializer.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-version.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-wasm.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/node_version.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/node_api.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/js_native_api.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/js_native_api_types.h \
+-  /Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/node_api_types.h \
+-  /private/var/folders/fc/b11l_jdx7x94lqvfrzck7nvh0000gn/T/tmp-83683-3kI6CBv1WR8T/node_modules/node-addon-api/napi.h \
+-  /private/var/folders/fc/b11l_jdx7x94lqvfrzck7nvh0000gn/T/tmp-83683-3kI6CBv1WR8T/node_modules/node-addon-api/napi-inl.h \
+-  /private/var/folders/fc/b11l_jdx7x94lqvfrzck7nvh0000gn/T/tmp-83683-3kI6CBv1WR8T/node_modules/node-addon-api/napi-inl.deprecated.h
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/node.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/cppgc/common.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8config.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-array-buffer.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-local-handle.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-handle-base.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-internal.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-object.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-maybe.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-persistent-handle.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-weak-callback-info.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-primitive.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-data.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-value.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-traced-handle.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-container.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-context.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-snapshot.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-isolate.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-callbacks.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-promise.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-debug.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-script.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-memory-span.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-message.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-embedder-heap.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-function-callback.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-microtask.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-statistics.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-unwinder.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-embedder-state-scope.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-date.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-exception.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-extension.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-external.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-function.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-template.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-initialization.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-platform.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-source-location.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-json.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-locker.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-microtask-queue.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-primitive-object.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-proxy.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-regexp.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-typed-array.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-value-serializer.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-version.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-wasm.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/node_version.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/node_api.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/js_native_api.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/js_native_api_types.h \
++  /Users/rikhilkokal/.electron-gyp/29.4.6/include/node/node_api_types.h \
++  /Users/rikhilkokal/Documents/Personal/Productive/Programming/iMessage-Text-Blast/node_modules/node-mac-contacts/node_modules/node-addon-api/napi.h \
++  /Users/rikhilkokal/Documents/Personal/Productive/Programming/iMessage-Text-Blast/node_modules/node-mac-contacts/node_modules/node-addon-api/napi-inl.h \
++  /Users/rikhilkokal/Documents/Personal/Productive/Programming/iMessage-Text-Blast/node_modules/node-mac-contacts/node_modules/node-addon-api/napi-inl.deprecated.h
+ ../contacts.mm:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/node.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/cppgc/common.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8config.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-array-buffer.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-local-handle.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-handle-base.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-internal.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-memory-span.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-object.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-maybe.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/cppgc/internal/conditional-stack-allocated.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/cppgc/macros.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/cppgc/internal/compiler-specific.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/cppgc/type-traits.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-persistent-handle.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-weak-callback-info.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-primitive.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-data.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-value.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-sandbox.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-traced-handle.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-platform.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-source-location.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-container.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-context.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-snapshot.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-isolate.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-callbacks.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-promise.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-debug.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-script.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-message.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-embedder-heap.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-exception.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-function-callback.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-microtask.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-statistics.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-unwinder.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-embedder-state-scope.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-date.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-extension.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-external.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-function.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-template.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-initialization.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-json.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-locker.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-microtask-queue.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-primitive-object.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-proxy.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-regexp.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-typed-array.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-value-serializer.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-version.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/v8-wasm.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/node_version.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/node_api.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/js_native_api.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/js_native_api_types.h:
+-/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node/node_api_types.h:
+-/private/var/folders/fc/b11l_jdx7x94lqvfrzck7nvh0000gn/T/tmp-83683-3kI6CBv1WR8T/node_modules/node-addon-api/napi.h:
+-/private/var/folders/fc/b11l_jdx7x94lqvfrzck7nvh0000gn/T/tmp-83683-3kI6CBv1WR8T/node_modules/node-addon-api/napi-inl.h:
+-/private/var/folders/fc/b11l_jdx7x94lqvfrzck7nvh0000gn/T/tmp-83683-3kI6CBv1WR8T/node_modules/node-addon-api/napi-inl.deprecated.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/node.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/cppgc/common.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8config.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-array-buffer.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-local-handle.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-handle-base.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-internal.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-object.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-maybe.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-persistent-handle.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-weak-callback-info.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-primitive.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-data.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-value.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-traced-handle.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-container.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-context.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-snapshot.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-isolate.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-callbacks.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-promise.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-debug.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-script.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-memory-span.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-message.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-embedder-heap.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-function-callback.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-microtask.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-statistics.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-unwinder.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-embedder-state-scope.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-date.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-exception.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-extension.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-external.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-function.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-template.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-initialization.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-platform.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-source-location.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-json.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-locker.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-microtask-queue.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-primitive-object.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-proxy.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-regexp.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-typed-array.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-value-serializer.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-version.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/v8-wasm.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/node_version.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/node_api.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/js_native_api.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/js_native_api_types.h:
++/Users/rikhilkokal/.electron-gyp/29.4.6/include/node/node_api_types.h:
++/Users/rikhilkokal/Documents/Personal/Productive/Programming/iMessage-Text-Blast/node_modules/node-mac-contacts/node_modules/node-addon-api/napi.h:
++/Users/rikhilkokal/Documents/Personal/Productive/Programming/iMessage-Text-Blast/node_modules/node-mac-contacts/node_modules/node-addon-api/napi-inl.h:
++/Users/rikhilkokal/Documents/Personal/Productive/Programming/iMessage-Text-Blast/node_modules/node-mac-contacts/node_modules/node-addon-api/napi-inl.deprecated.h:
+diff --git a/node_modules/node-mac-contacts/build/Release/.deps/Release/obj.target/node-addon-api/nothing.o.d b/node_modules/node-mac-contacts/build/Release/.deps/Release/obj.target/node-addon-api/nothing.o.d
+deleted file mode 100644
+index 67ce51d..0000000
+--- a/node_modules/node-mac-contacts/build/Release/.deps/Release/obj.target/node-addon-api/nothing.o.d
++++ /dev/null
+@@ -1,4 +0,0 @@
+-cmd_Release/obj.target/nothing/../node-addon-api/nothing.o := cc -o Release/obj.target/nothing/../node-addon-api/nothing.o ../../node-addon-api/nothing.c '-DNODE_GYP_MODULE_NAME=nothing' '-DUSING_UV_SHARED=1' '-DUSING_V8_SHARED=1' '-DV8_DEPRECATION_WARNINGS=1' '-D_GLIBCXX_USE_CXX11_ABI=1' '-D_FILE_OFFSET_BITS=64' '-D_DARWIN_USE_64_BIT_INODE=1' '-D_LARGEFILE_SOURCE' '-DOPENSSL_NO_PINSHARED' '-DOPENSSL_THREADS' -I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node -I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/src -I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/openssl/config -I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/openssl/openssl/include -I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/uv/include -I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/zlib -I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/v8/include  -O3 -gdwarf-2 -fno-strict-aliasing -mmacosx-version-min=13.5 -arch arm64 -Wall -Wendif-labels -W -Wno-unused-parameter  -MMD -MF ./Release/.deps/Release/obj.target/nothing/../node-addon-api/nothing.o.d.raw   -c
+-Release/obj.target/nothing/../node-addon-api/nothing.o: \
+-  ../../node-addon-api/nothing.c
+-../../node-addon-api/nothing.c:
+diff --git a/node_modules/node-mac-contacts/build/Release/.deps/Release/obj.target/nothing/node_modules/node-addon-api/nothing.o.d b/node_modules/node-mac-contacts/build/Release/.deps/Release/obj.target/nothing/node_modules/node-addon-api/nothing.o.d
+new file mode 100644
+index 0000000..1ba7288
+--- /dev/null
++++ b/node_modules/node-mac-contacts/build/Release/.deps/Release/obj.target/nothing/node_modules/node-addon-api/nothing.o.d
+@@ -0,0 +1,4 @@
++cmd_Release/obj.target/nothing/node_modules/node-addon-api/nothing.o := cc -o Release/obj.target/nothing/node_modules/node-addon-api/nothing.o ../node_modules/node-addon-api/nothing.c '-DNODE_GYP_MODULE_NAME=nothing' '-DUSING_UV_SHARED=1' '-DUSING_V8_SHARED=1' '-DV8_DEPRECATION_WARNINGS=1' '-DV8_DEPRECATION_WARNINGS' '-DV8_IMMINENT_DEPRECATION_WARNINGS' '-D_GLIBCXX_USE_CXX11_ABI=1' '-DELECTRON_ENSURE_CONFIG_GYPI' '-D_DARWIN_USE_64_BIT_INODE=1' '-D_LARGEFILE_SOURCE' '-D_FILE_OFFSET_BITS=64' '-DUSING_ELECTRON_CONFIG_GYPI' '-DV8_COMPRESS_POINTERS' '-DV8_COMPRESS_POINTERS_IN_SHARED_CAGE' '-DV8_ENABLE_SANDBOX' '-DV8_31BIT_SMIS_ON_64BIT_ARCH' '-DOPENSSL_NO_PINSHARED' '-DOPENSSL_THREADS' '-DOPENSSL_NO_ASM' -I/Users/rikhilkokal/.electron-gyp/29.4.6/include/node -I/Users/rikhilkokal/.electron-gyp/29.4.6/src -I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/openssl/config -I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/openssl/openssl/include -I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/uv/include -I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/zlib -I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/v8/include  -O3 -gdwarf-2 -mmacosx-version-min=10.15 -arch arm64 -Wall -Wendif-labels -W -Wno-unused-parameter -fno-strict-aliasing -MMD -MF ./Release/.deps/Release/obj.target/nothing/node_modules/node-addon-api/nothing.o.d.raw   -c
++Release/obj.target/nothing/node_modules/node-addon-api/nothing.o: \
++  ../node_modules/node-addon-api/nothing.c
++../node_modules/node-addon-api/nothing.c:
+diff --git a/node_modules/node-mac-contacts/build/Release/.forge-meta b/node_modules/node-mac-contacts/build/Release/.forge-meta
+new file mode 100644
+index 0000000..4191bea
+--- /dev/null
++++ b/node_modules/node-mac-contacts/build/Release/.forge-meta
+@@ -0,0 +1 @@
++arm64--121
+\ No newline at end of file
+diff --git a/node_modules/node-mac-contacts/build/Release/contacts.node b/node_modules/node-mac-contacts/build/Release/contacts.node
+index 6be9605..d21d61a 100755
+Binary files a/node_modules/node-mac-contacts/build/Release/contacts.node and b/node_modules/node-mac-contacts/build/Release/contacts.node differ
+diff --git a/node_modules/node-mac-contacts/build/Release/nothing.a b/node_modules/node-mac-contacts/build/Release/nothing.a
+index 01fe7a0..85b817b 100644
+Binary files a/node_modules/node-mac-contacts/build/Release/nothing.a and b/node_modules/node-mac-contacts/build/Release/nothing.a differ
+diff --git a/node_modules/node-mac-contacts/build/Release/obj.target/contacts/contacts.o b/node_modules/node-mac-contacts/build/Release/obj.target/contacts/contacts.o
+index 79e27e0..03c19f2 100644
+Binary files a/node_modules/node-mac-contacts/build/Release/obj.target/contacts/contacts.o and b/node_modules/node-mac-contacts/build/Release/obj.target/contacts/contacts.o differ
+diff --git a/node_modules/node-mac-contacts/build/Release/obj.target/node-addon-api/nothing.o b/node_modules/node-mac-contacts/build/Release/obj.target/nothing/node_modules/node-addon-api/nothing.o
+similarity index 87%
+rename from node_modules/node-mac-contacts/build/Release/obj.target/node-addon-api/nothing.o
+rename to node_modules/node-mac-contacts/build/Release/obj.target/nothing/node_modules/node-addon-api/nothing.o
+index d5c2ab0..efc6418 100644
+Binary files a/node_modules/node-mac-contacts/build/Release/obj.target/node-addon-api/nothing.o and b/node_modules/node-mac-contacts/build/Release/obj.target/nothing/node_modules/node-addon-api/nothing.o differ
+diff --git a/node_modules/node-mac-contacts/build/config.gypi b/node_modules/node-mac-contacts/build/config.gypi
+index 75eff4b..d60c754 100644
+--- a/node_modules/node-mac-contacts/build/config.gypi
++++ b/node_modules/node-mac-contacts/build/config.gypi
+@@ -2,16 +2,6 @@
+ {
+   "target_defaults": {
+     "cflags": [],
+-    "configurations": {
+-      "Debug": {
+-        "v8_enable_v8_checks": 0,
+-        "variables": {}
+-      },
+-      "Release": {
+-        "v8_enable_v8_checks": 1,
+-        "variables": {}
+-      }
+-    },
+     "default_configuration": "Release",
+     "defines": [],
+     "include_dirs": [],
+@@ -22,8 +12,8 @@
+   "variables": {
+     "arm_fpu": "neon",
+     "asan": 0,
+-    "clang": 1,
+-    "control_flow_guard": "false",
++    "build_v8_with_gn": "false",
++    "built_with_electron": 1,
+     "coverage": "false",
+     "dcheck_always_on": 0,
+     "debug_nghttp2": "false",
+@@ -33,62 +23,26 @@
+     "enable_pgo_use": "false",
+     "error_on_warn": "false",
+     "force_dynamic_crt": 0,
+-    "host_arch": "arm64",
+-    "icu_data_in": "../../deps/icu-tmp/icudt77l.dat",
++    "host_arch": "x64",
++    "icu_data_in": "..\\..\\deps\\icu-tmp\\icudt73l.dat",
+     "icu_endianness": "l",
+     "icu_gyp_path": "tools/icu/icu-generic.gyp",
+     "icu_path": "deps/icu-small",
+     "icu_small": "false",
+-    "icu_ver_major": "77",
++    "icu_ver_major": "73",
++    "is_debug": 0,
+     "libdir": "lib",
+-    "llvm_version": "16.0",
+-    "napi_build_version": "10",
++    "llvm_version": "0.0",
++    "napi_build_version": "9",
+     "node_builtin_shareable_builtins": [
+       "deps/cjs-module-lexer/lexer.js",
+       "deps/cjs-module-lexer/dist/lexer.js",
+-      "deps/undici/undici.js",
+-      "deps/amaro/dist/index.js"
++      "deps/undici/undici.js"
+     ],
+     "node_byteorder": "little",
+-    "node_cctest_sources": [
+-      "src/node_snapshot_stub.cc",
+-      "test/cctest/inspector/test_network_requests_buffer.cc",
+-      "test/cctest/inspector/test_node_protocol.cc",
+-      "test/cctest/node_test_fixture.cc",
+-      "test/cctest/test_aliased_buffer.cc",
+-      "test/cctest/test_base64.cc",
+-      "test/cctest/test_base_object_ptr.cc",
+-      "test/cctest/test_cppgc.cc",
+-      "test/cctest/test_crypto_clienthello.cc",
+-      "test/cctest/test_dataqueue.cc",
+-      "test/cctest/test_environment.cc",
+-      "test/cctest/test_inspector_socket.cc",
+-      "test/cctest/test_inspector_socket_server.cc",
+-      "test/cctest/test_json_utils.cc",
+-      "test/cctest/test_linked_binding.cc",
+-      "test/cctest/test_lru_cache.cc",
+-      "test/cctest/test_node_api.cc",
+-      "test/cctest/test_node_crypto.cc",
+-      "test/cctest/test_node_crypto_env.cc",
+-      "test/cctest/test_node_postmortem_metadata.cc",
+-      "test/cctest/test_node_task_runner.cc",
+-      "test/cctest/test_path.cc",
+-      "test/cctest/test_per_process.cc",
+-      "test/cctest/test_platform.cc",
+-      "test/cctest/test_quic_cid.cc",
+-      "test/cctest/test_quic_error.cc",
+-      "test/cctest/test_quic_tokens.cc",
+-      "test/cctest/test_report.cc",
+-      "test/cctest/test_sockaddr.cc",
+-      "test/cctest/test_string_bytes.cc",
+-      "test/cctest/test_traced_value.cc",
+-      "test/cctest/test_util.cc",
+-      "test/cctest/node_test_fixture.h"
+-    ],
+     "node_debug_lib": "false",
+     "node_enable_d8": "false",
+     "node_enable_v8_vtunejit": "false",
+-    "node_enable_v8windbg": "false",
+     "node_fipsinstall": "false",
+     "node_install_corepack": "true",
+     "node_install_npm": "true",
+@@ -133,17 +87,11 @@
+       "lib/internal/assert.js",
+       "lib/internal/assert/assertion_error.js",
+       "lib/internal/assert/calltracker.js",
+-      "lib/internal/assert/myers_diff.js",
+-      "lib/internal/assert/utils.js",
+-      "lib/internal/async_context_frame.js",
+       "lib/internal/async_hooks.js",
+-      "lib/internal/async_local_storage/async_context_frame.js",
+-      "lib/internal/async_local_storage/async_hooks.js",
+       "lib/internal/blob.js",
+       "lib/internal/blocklist.js",
+       "lib/internal/bootstrap/node.js",
+       "lib/internal/bootstrap/realm.js",
+-      "lib/internal/bootstrap/shadow_realm.js",
+       "lib/internal/bootstrap/switches/does_not_own_process_state.js",
+       "lib/internal/bootstrap/switches/does_own_process_state.js",
+       "lib/internal/bootstrap/switches/is_main_thread.js",
+@@ -164,22 +112,17 @@
+       "lib/internal/console/global.js",
+       "lib/internal/constants.js",
+       "lib/internal/crypto/aes.js",
+-      "lib/internal/crypto/argon2.js",
+       "lib/internal/crypto/certificate.js",
+       "lib/internal/crypto/cfrg.js",
+-      "lib/internal/crypto/chacha20_poly1305.js",
+       "lib/internal/crypto/cipher.js",
+       "lib/internal/crypto/diffiehellman.js",
+       "lib/internal/crypto/ec.js",
+       "lib/internal/crypto/hash.js",
+       "lib/internal/crypto/hashnames.js",
+       "lib/internal/crypto/hkdf.js",
+-      "lib/internal/crypto/kem.js",
+       "lib/internal/crypto/keygen.js",
+       "lib/internal/crypto/keys.js",
+       "lib/internal/crypto/mac.js",
+-      "lib/internal/crypto/ml_dsa.js",
+-      "lib/internal/crypto/ml_kem.js",
+       "lib/internal/crypto/pbkdf2.js",
+       "lib/internal/crypto/random.js",
+       "lib/internal/crypto/rsa.js",
+@@ -189,7 +132,6 @@
+       "lib/internal/crypto/webcrypto.js",
+       "lib/internal/crypto/webidl.js",
+       "lib/internal/crypto/x509.js",
+-      "lib/internal/data_url.js",
+       "lib/internal/debugger/inspect.js",
+       "lib/internal/debugger/inspect_client.js",
+       "lib/internal/debugger/inspect_repl.js",
+@@ -200,9 +142,7 @@
+       "lib/internal/encoding.js",
+       "lib/internal/error_serdes.js",
+       "lib/internal/errors.js",
+-      "lib/internal/errors/error_source.js",
+       "lib/internal/event_target.js",
+-      "lib/internal/events/abort_listener.js",
+       "lib/internal/events/symbols.js",
+       "lib/internal/file.js",
+       "lib/internal/fixed_queue.js",
+@@ -211,12 +151,12 @@
+       "lib/internal/fs/cp/cp-sync.js",
+       "lib/internal/fs/cp/cp.js",
+       "lib/internal/fs/dir.js",
+-      "lib/internal/fs/glob.js",
+       "lib/internal/fs/promises.js",
+       "lib/internal/fs/read/context.js",
+       "lib/internal/fs/recursive_watch.js",
+       "lib/internal/fs/rimraf.js",
+       "lib/internal/fs/streams.js",
++      "lib/internal/fs/sync.js",
+       "lib/internal/fs/sync_write_stream.js",
+       "lib/internal/fs/utils.js",
+       "lib/internal/fs/watchers.js",
+@@ -226,17 +166,11 @@
+       "lib/internal/http2/compat.js",
+       "lib/internal/http2/core.js",
+       "lib/internal/http2/util.js",
+-      "lib/internal/inspector/network.js",
+-      "lib/internal/inspector/network_http.js",
+-      "lib/internal/inspector/network_http2.js",
+-      "lib/internal/inspector/network_resources.js",
+-      "lib/internal/inspector/network_undici.js",
++      "lib/internal/idna.js",
+       "lib/internal/inspector_async_hook.js",
+-      "lib/internal/inspector_network_tracking.js",
+       "lib/internal/js_stream_socket.js",
+       "lib/internal/legacy/processbinding.js",
+       "lib/internal/linkedlist.js",
+-      "lib/internal/locks.js",
+       "lib/internal/main/check_syntax.js",
+       "lib/internal/main/embedding.js",
+       "lib/internal/main/eval_stdin.js",
+@@ -252,17 +186,19 @@
+       "lib/internal/main/worker_thread.js",
+       "lib/internal/mime.js",
+       "lib/internal/modules/cjs/loader.js",
+-      "lib/internal/modules/customization_hooks.js",
+       "lib/internal/modules/esm/assert.js",
+       "lib/internal/modules/esm/create_dynamic_module.js",
++      "lib/internal/modules/esm/fetch_module.js",
+       "lib/internal/modules/esm/formats.js",
+       "lib/internal/modules/esm/get_format.js",
++      "lib/internal/modules/esm/handle_process_exit.js",
+       "lib/internal/modules/esm/hooks.js",
+       "lib/internal/modules/esm/initialize_import_meta.js",
+       "lib/internal/modules/esm/load.js",
+       "lib/internal/modules/esm/loader.js",
+       "lib/internal/modules/esm/module_job.js",
+       "lib/internal/modules/esm/module_map.js",
++      "lib/internal/modules/esm/package_config.js",
+       "lib/internal/modules/esm/resolve.js",
+       "lib/internal/modules/esm/shared_constants.js",
+       "lib/internal/modules/esm/translators.js",
+@@ -271,8 +207,6 @@
+       "lib/internal/modules/helpers.js",
+       "lib/internal/modules/package_json_reader.js",
+       "lib/internal/modules/run_main.js",
+-      "lib/internal/modules/typescript.js",
+-      "lib/internal/navigator.js",
+       "lib/internal/net.js",
+       "lib/internal/options.js",
+       "lib/internal/per_context/domexception.js",
+@@ -288,11 +222,14 @@
+       "lib/internal/perf/timerify.js",
+       "lib/internal/perf/usertiming.js",
+       "lib/internal/perf/utils.js",
++      "lib/internal/policy/manifest.js",
++      "lib/internal/policy/sri.js",
+       "lib/internal/priority_queue.js",
++      "lib/internal/process/esm_loader.js",
+       "lib/internal/process/execution.js",
+-      "lib/internal/process/finalization.js",
+       "lib/internal/process/per_thread.js",
+       "lib/internal/process/permission.js",
++      "lib/internal/process/policy.js",
+       "lib/internal/process/pre_execution.js",
+       "lib/internal/process/promises.js",
+       "lib/internal/process/report.js",
+@@ -302,10 +239,6 @@
+       "lib/internal/process/worker_thread_only.js",
+       "lib/internal/promise_hooks.js",
+       "lib/internal/querystring.js",
+-      "lib/internal/quic/quic.js",
+-      "lib/internal/quic/state.js",
+-      "lib/internal/quic/stats.js",
+-      "lib/internal/quic/symbols.js",
+       "lib/internal/readline/callbacks.js",
+       "lib/internal/readline/emitKeypressEvents.js",
+       "lib/internal/readline/interface.js",
+@@ -320,16 +253,14 @@
+       "lib/internal/source_map/prepare_stack_trace.js",
+       "lib/internal/source_map/source_map.js",
+       "lib/internal/source_map/source_map_cache.js",
+-      "lib/internal/source_map/source_map_cache_map.js",
+       "lib/internal/stream_base_commons.js",
+       "lib/internal/streams/add-abort-signal.js",
++      "lib/internal/streams/buffer_list.js",
+       "lib/internal/streams/compose.js",
+       "lib/internal/streams/destroy.js",
+       "lib/internal/streams/duplex.js",
+       "lib/internal/streams/duplexify.js",
+-      "lib/internal/streams/duplexpair.js",
+       "lib/internal/streams/end-of-stream.js",
+-      "lib/internal/streams/fast-utf8-stream.js",
+       "lib/internal/streams/from.js",
+       "lib/internal/streams/lazy_transform.js",
+       "lib/internal/streams/legacy.js",
+@@ -341,29 +272,25 @@
+       "lib/internal/streams/transform.js",
+       "lib/internal/streams/utils.js",
+       "lib/internal/streams/writable.js",
++      "lib/internal/structured_clone.js",
+       "lib/internal/test/binding.js",
+       "lib/internal/test/transfer.js",
+-      "lib/internal/test_runner/assert.js",
+       "lib/internal/test_runner/coverage.js",
+       "lib/internal/test_runner/harness.js",
+-      "lib/internal/test_runner/mock/loader.js",
+       "lib/internal/test_runner/mock/mock.js",
+       "lib/internal/test_runner/mock/mock_timers.js",
+       "lib/internal/test_runner/reporter/dot.js",
+       "lib/internal/test_runner/reporter/junit.js",
+-      "lib/internal/test_runner/reporter/lcov.js",
+-      "lib/internal/test_runner/reporter/rerun.js",
+       "lib/internal/test_runner/reporter/spec.js",
+       "lib/internal/test_runner/reporter/tap.js",
+-      "lib/internal/test_runner/reporter/utils.js",
+       "lib/internal/test_runner/reporter/v8-serializer.js",
+       "lib/internal/test_runner/runner.js",
+-      "lib/internal/test_runner/snapshot.js",
+       "lib/internal/test_runner/test.js",
+       "lib/internal/test_runner/tests_stream.js",
+       "lib/internal/test_runner/utils.js",
+       "lib/internal/timers.js",
+       "lib/internal/tls/secure-context.js",
++      "lib/internal/tls/secure-pair.js",
+       "lib/internal/trace_events_async_hooks.js",
+       "lib/internal/tty.js",
+       "lib/internal/url.js",
+@@ -371,12 +298,12 @@
+       "lib/internal/util/colors.js",
+       "lib/internal/util/comparisons.js",
+       "lib/internal/util/debuglog.js",
+-      "lib/internal/util/diff.js",
++      "lib/internal/util/embedding.js",
+       "lib/internal/util/inspect.js",
+       "lib/internal/util/inspector.js",
++      "lib/internal/util/iterable_weak_map.js",
+       "lib/internal/util/parse_args/parse_args.js",
+       "lib/internal/util/parse_args/utils.js",
+-      "lib/internal/util/trace_sigint.js",
+       "lib/internal/util/types.js",
+       "lib/internal/v8/startup_snapshot.js",
+       "lib/internal/v8_prof_polyfill.js",
+@@ -388,7 +315,6 @@
+       "lib/internal/watch_mode/files_watcher.js",
+       "lib/internal/watchdog.js",
+       "lib/internal/webidl.js",
+-      "lib/internal/webstorage.js",
+       "lib/internal/webstreams/adapters.js",
+       "lib/internal/webstreams/compression.js",
+       "lib/internal/webstreams/encoding.js",
+@@ -399,10 +325,8 @@
+       "lib/internal/webstreams/util.js",
+       "lib/internal/webstreams/writablestream.js",
+       "lib/internal/worker.js",
+-      "lib/internal/worker/clone_dom_exception.js",
+       "lib/internal/worker/io.js",
+       "lib/internal/worker/js_transferable.js",
+-      "lib/internal/worker/messaging.js",
+       "lib/module.js",
+       "lib/net.js",
+       "lib/os.js",
+@@ -413,12 +337,9 @@
+       "lib/process.js",
+       "lib/punycode.js",
+       "lib/querystring.js",
+-      "lib/quic.js",
+       "lib/readline.js",
+       "lib/readline/promises.js",
+       "lib/repl.js",
+-      "lib/sea.js",
+-      "lib/sqlite.js",
+       "lib/stream.js",
+       "lib/stream/consumers.js",
+       "lib/stream/promises.js",
+@@ -441,13 +362,11 @@
+       "lib/worker_threads.js",
+       "lib/zlib.js"
+     ],
+-    "node_module_version": 137,
++    "node_module_version": 121,
+     "node_no_browser_globals": "false",
+-    "node_prefix": "/usr/local",
+-    "node_quic": "false",
+-    "node_release_urlbase": "https://nodejs.org/download/release/",
++    "node_prefix": "\\usr\\local",
++    "node_release_urlbase": "",
+     "node_shared": "false",
+-    "node_shared_ada": "false",
+     "node_shared_brotli": "false",
+     "node_shared_cares": "false",
+     "node_shared_http_parser": "false",
+@@ -456,69 +375,59 @@
+     "node_shared_nghttp3": "false",
+     "node_shared_ngtcp2": "false",
+     "node_shared_openssl": "false",
+-    "node_shared_simdjson": "false",
+-    "node_shared_simdutf": "false",
+-    "node_shared_sqlite": "false",
+-    "node_shared_uvwasi": "false",
+     "node_shared_zlib": "false",
+-    "node_shared_zstd": "false",
+     "node_tag": "",
+     "node_target_type": "executable",
+-    "node_use_amaro": "true",
+     "node_use_bundled_v8": "true",
+-    "node_use_node_code_cache": "true",
+-    "node_use_node_snapshot": "true",
++    "node_use_node_code_cache": "false",
++    "node_use_node_snapshot": "false",
+     "node_use_openssl": "true",
+-    "node_use_sqlite": "true",
+     "node_use_v8_platform": "true",
+-    "node_with_ltcg": "false",
++    "node_with_ltcg": "true",
+     "node_without_node_options": "false",
+-    "node_write_snapshot_as_array_literals": "false",
++    "node_write_snapshot_as_array_literals": "true",
+     "openssl_is_fips": "false",
+-    "openssl_quic": "false",
++    "openssl_no_asm": 1,
++    "openssl_quic": "true",
+     "ossfuzz": "false",
+-    "shlib_suffix": "137.dylib",
++    "shlib_suffix": "so.115",
+     "single_executable_application": "true",
+-    "suppress_all_error_on_warn": "false",
+     "target_arch": "arm64",
+-    "ubsan": 0,
+-    "use_ccache_win": 0,
+-    "use_prefix_to_find_headers": "false",
+-    "v8_enable_31bit_smis_on_64bit_arch": 0,
+-    "v8_enable_extensible_ro_snapshot": 0,
+-    "v8_enable_external_code_space": 0,
++    "using_electron_config_gypi": 1,
++    "v8_enable_31bit_smis_on_64bit_arch": 1,
+     "v8_enable_gdbjit": 0,
+     "v8_enable_hugepage": 0,
+     "v8_enable_i18n_support": 1,
+     "v8_enable_inspector": 1,
+     "v8_enable_javascript_promise_hooks": 1,
+     "v8_enable_lite_mode": 0,
+-    "v8_enable_maglev": 1,
+     "v8_enable_object_print": 1,
+-    "v8_enable_pointer_compression": 0,
+-    "v8_enable_pointer_compression_shared_cage": 0,
+-    "v8_enable_sandbox": 0,
++    "v8_enable_pointer_compression": 1,
++    "v8_enable_sandbox": 1,
++    "v8_enable_shared_ro_heap": 0,
+     "v8_enable_webassembly": 1,
++    "v8_no_strict_aliasing": 1,
+     "v8_optimized_debug": 1,
+     "v8_promise_internal_field_count": 1,
+     "v8_random_seed": 0,
+     "v8_trace_maps": 0,
+     "v8_use_siphash": 1,
+-    "want_separate_host_toolset": 0,
+-    "xcode_version": "16.0",
+-    "nodedir": "/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0",
++    "want_separate_host_toolset": 1,
++    "nodedir": "/Users/rikhilkokal/.electron-gyp/29.4.6",
+     "python": "/Library/Developer/CommandLineTools/usr/bin/python3",
+     "standalone_static_library": 1,
+-    "prefix": "/Users/rikhilkokal/.npm-global",
+-    "user_agent": "npm/11.6.2 node/v24.13.0 darwin arm64 workspaces/false",
+-    "cache": "/tmp/npm-cache",
+-    "node_gyp": "/usr/local/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js",
+-    "force": "true",
+-    "npm_version": "11.6.2",
+-    "init_module": "/Users/rikhilkokal/.npm-init.js",
+-    "userconfig": "/Users/rikhilkokal/.npmrc",
++    "runtime": "electron",
++    "target": "29.4.6",
++    "build_from_source": "true",
++    "global_prefix": "/Users/rikhilkokal/.npm-global",
++    "local_prefix": "/Users/rikhilkokal/Documents/Personal/Productive/Programming/iMessage-Text-Blast",
+     "globalconfig": "/Users/rikhilkokal/.npm-global/etc/npmrc",
+-    "local_prefix": "/private/var/folders/fc/b11l_jdx7x94lqvfrzck7nvh0000gn/T/tmp-83683-3kI6CBv1WR8T",
+-    "global_prefix": "/Users/rikhilkokal/.npm-global"
++    "userconfig": "/Users/rikhilkokal/.npmrc",
++    "init_module": "/Users/rikhilkokal/.npm-init.js",
++    "npm_version": "11.6.2",
++    "node_gyp": "/usr/local/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js",
++    "cache": "/tmp/npm-cache",
++    "user_agent": "npm/11.6.2 node/v24.13.0 darwin arm64 workspaces/false",
++    "prefix": "/Users/rikhilkokal/.npm-global"
+   }
+ }
+diff --git a/node_modules/node-mac-contacts/build/contacts.target.mk b/node_modules/node-mac-contacts/build/contacts.target.mk
+index 4b30262..fa04641 100644
+--- a/node_modules/node-mac-contacts/build/contacts.target.mk
++++ b/node_modules/node-mac-contacts/build/contacts.target.mk
+@@ -7,23 +7,32 @@ DEFS_Debug := \
+ 	'-DUSING_UV_SHARED=1' \
+ 	'-DUSING_V8_SHARED=1' \
+ 	'-DV8_DEPRECATION_WARNINGS=1' \
++	'-DV8_DEPRECATION_WARNINGS' \
++	'-DV8_IMMINENT_DEPRECATION_WARNINGS' \
+ 	'-D_GLIBCXX_USE_CXX11_ABI=1' \
+-	'-D_FILE_OFFSET_BITS=64' \
++	'-DELECTRON_ENSURE_CONFIG_GYPI' \
+ 	'-D_DARWIN_USE_64_BIT_INODE=1' \
+ 	'-D_LARGEFILE_SOURCE' \
++	'-D_FILE_OFFSET_BITS=64' \
++	'-DUSING_ELECTRON_CONFIG_GYPI' \
++	'-DV8_COMPRESS_POINTERS' \
++	'-DV8_COMPRESS_POINTERS_IN_SHARED_CAGE' \
++	'-DV8_ENABLE_SANDBOX' \
++	'-DV8_31BIT_SMIS_ON_64BIT_ARCH' \
+ 	'-DOPENSSL_NO_PINSHARED' \
+ 	'-DOPENSSL_THREADS' \
++	'-DOPENSSL_NO_ASM' \
+ 	'-DNAPI_DISABLE_CPP_EXCEPTIONS' \
+ 	'-DBUILDING_NODE_EXTENSION' \
+ 	'-DDEBUG' \
+-	'-D_DEBUG'
++	'-D_DEBUG' \
++	'-DV8_ENABLE_CHECKS'
+ 
+ # Flags passed to all source files.
+ CFLAGS_Debug := \
+ 	-O0 \
+ 	-gdwarf-2 \
+-	-fno-strict-aliasing \
+-	-mmacosx-version-min=13.5 \
++	-mmacosx-version-min=10.15 \
+ 	-arch \
+ 	arm64 \
+ 	-Wall \
+@@ -32,11 +41,12 @@ CFLAGS_Debug := \
+ 	-Wno-unused-parameter
+ 
+ # Flags passed to only C files.
+-CFLAGS_C_Debug :=
++CFLAGS_C_Debug := \
++	-fno-strict-aliasing
+ 
+ # Flags passed to only C++ files.
+ CFLAGS_CC_Debug := \
+-	-std=gnu++20 \
++	-std=gnu++17 \
+ 	-stdlib=libc++ \
+ 	-fno-rtti \
+ 	-fno-exceptions \
+@@ -51,26 +61,35 @@ CFLAGS_OBJC_Debug :=
+ CFLAGS_OBJCC_Debug :=
+ 
+ INCS_Debug := \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/src \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/openssl/config \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/openssl/openssl/include \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/uv/include \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/zlib \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/v8/include \
+-	-I/private/var/folders/fc/b11l_jdx7x94lqvfrzck7nvh0000gn/T/tmp-83683-3kI6CBv1WR8T/node_modules/node-addon-api
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/include/node \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/src \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/openssl/config \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/openssl/openssl/include \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/uv/include \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/zlib \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/v8/include \
++	-I/Users/rikhilkokal/Documents/Personal/Productive/Programming/iMessage-Text-Blast/node_modules/node-mac-contacts/node_modules/node-addon-api
+ 
+ DEFS_Release := \
+ 	'-DNODE_GYP_MODULE_NAME=contacts' \
+ 	'-DUSING_UV_SHARED=1' \
+ 	'-DUSING_V8_SHARED=1' \
+ 	'-DV8_DEPRECATION_WARNINGS=1' \
++	'-DV8_DEPRECATION_WARNINGS' \
++	'-DV8_IMMINENT_DEPRECATION_WARNINGS' \
+ 	'-D_GLIBCXX_USE_CXX11_ABI=1' \
+-	'-D_FILE_OFFSET_BITS=64' \
++	'-DELECTRON_ENSURE_CONFIG_GYPI' \
+ 	'-D_DARWIN_USE_64_BIT_INODE=1' \
+ 	'-D_LARGEFILE_SOURCE' \
++	'-D_FILE_OFFSET_BITS=64' \
++	'-DUSING_ELECTRON_CONFIG_GYPI' \
++	'-DV8_COMPRESS_POINTERS' \
++	'-DV8_COMPRESS_POINTERS_IN_SHARED_CAGE' \
++	'-DV8_ENABLE_SANDBOX' \
++	'-DV8_31BIT_SMIS_ON_64BIT_ARCH' \
+ 	'-DOPENSSL_NO_PINSHARED' \
+ 	'-DOPENSSL_THREADS' \
++	'-DOPENSSL_NO_ASM' \
+ 	'-DNAPI_DISABLE_CPP_EXCEPTIONS' \
+ 	'-DBUILDING_NODE_EXTENSION'
+ 
+@@ -78,8 +97,7 @@ DEFS_Release := \
+ CFLAGS_Release := \
+ 	-O3 \
+ 	-gdwarf-2 \
+-	-fno-strict-aliasing \
+-	-mmacosx-version-min=13.5 \
++	-mmacosx-version-min=10.15 \
+ 	-arch \
+ 	arm64 \
+ 	-Wall \
+@@ -88,11 +106,12 @@ CFLAGS_Release := \
+ 	-Wno-unused-parameter
+ 
+ # Flags passed to only C files.
+-CFLAGS_C_Release :=
++CFLAGS_C_Release := \
++	-fno-strict-aliasing
+ 
+ # Flags passed to only C++ files.
+ CFLAGS_CC_Release := \
+-	-std=gnu++20 \
++	-std=gnu++17 \
+ 	-stdlib=libc++ \
+ 	-fno-rtti \
+ 	-fno-exceptions \
+@@ -107,14 +126,14 @@ CFLAGS_OBJC_Release :=
+ CFLAGS_OBJCC_Release :=
+ 
+ INCS_Release := \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/src \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/openssl/config \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/openssl/openssl/include \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/uv/include \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/zlib \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/v8/include \
+-	-I/private/var/folders/fc/b11l_jdx7x94lqvfrzck7nvh0000gn/T/tmp-83683-3kI6CBv1WR8T/node_modules/node-addon-api
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/include/node \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/src \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/openssl/config \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/openssl/openssl/include \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/uv/include \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/zlib \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/v8/include \
++	-I/Users/rikhilkokal/Documents/Personal/Productive/Programming/iMessage-Text-Blast/node_modules/node-mac-contacts/node_modules/node-addon-api
+ 
+ OBJS := \
+ 	$(obj).target/$(TARGET)/contacts.o
+@@ -152,7 +171,7 @@ LDFLAGS_Debug := \
+ 	-framework CoreFoundation -framework AppKit -framework Contacts \
+ 	-undefined dynamic_lookup \
+ 	-Wl,-search_paths_first \
+-	-mmacosx-version-min=13.5 \
++	-mmacosx-version-min=10.15 \
+ 	-arch \
+ 	arm64 \
+ 	-L$(builddir) \
+@@ -167,7 +186,7 @@ LDFLAGS_Release := \
+ 	-framework CoreFoundation -framework AppKit -framework Contacts \
+ 	-undefined dynamic_lookup \
+ 	-Wl,-search_paths_first \
+-	-mmacosx-version-min=13.5 \
++	-mmacosx-version-min=10.15 \
+ 	-arch \
+ 	arm64 \
+ 	-L$(builddir) \
+diff --git a/node_modules/node-mac-contacts/build/gyp-mac-tool b/node_modules/node-mac-contacts/build/gyp-mac-tool
+index ab21cf1..ffef860 100755
+--- a/node_modules/node-mac-contacts/build/gyp-mac-tool
++++ b/node_modules/node-mac-contacts/build/gyp-mac-tool
+@@ -9,6 +9,7 @@
+ These functions are executed via gyp-mac-tool when using the Makefile generator.
+ """
+ 
++
+ import fcntl
+ import fnmatch
+ import glob
+@@ -25,13 +26,14 @@ import tempfile
+ 
+ def main(args):
+     executor = MacTool()
+-    if (exit_code := executor.Dispatch(args)) is not None:
++    exit_code = executor.Dispatch(args)
++    if exit_code is not None:
+         sys.exit(exit_code)
+ 
+ 
+ class MacTool:
+     """This class performs all the Mac tooling steps. The methods can either be
+-    executed directly, or dispatched from an argument list."""
++  executed directly, or dispatched from an argument list."""
+ 
+     def Dispatch(self, args):
+         """Dispatches a string command to a method."""
+@@ -47,7 +49,7 @@ class MacTool:
+ 
+     def ExecCopyBundleResource(self, source, dest, convert_to_binary):
+         """Copies a resource file to the bundle/Resources directory, performing any
+-        necessary compilation on each resource."""
++    necessary compilation on each resource."""
+         convert_to_binary = convert_to_binary == "True"
+         extension = os.path.splitext(source)[1].lower()
+         if os.path.isdir(source):
+@@ -58,7 +60,9 @@ class MacTool:
+             if os.path.exists(dest):
+                 shutil.rmtree(dest)
+             shutil.copytree(source, dest)
+-        elif extension in {".xib", ".storyboard"}:
++        elif extension == ".xib":
++            return self._CopyXIBFile(source, dest)
++        elif extension == ".storyboard":
+             return self._CopyXIBFile(source, dest)
+         elif extension == ".strings" and not convert_to_binary:
+             self._CopyStringsFile(source, dest)
+@@ -67,7 +71,7 @@ class MacTool:
+                 os.unlink(dest)
+             shutil.copy(source, dest)
+ 
+-        if convert_to_binary and extension in {".plist", ".strings"}:
++        if convert_to_binary and extension in (".plist", ".strings"):
+             self._ConvertToBinary(dest)
+ 
+     def _CopyXIBFile(self, source, dest):
+@@ -141,7 +145,7 @@ class MacTool:
+         #     CFPropertyListCreateFromXMLData(): Old-style plist parser: missing
+         #     semicolon in dictionary.
+         # on invalid files. Do the same kind of validation.
+-        import CoreFoundation  # noqa: PLC0415
++        import CoreFoundation
+ 
+         with open(source, "rb") as in_file:
+             s = in_file.read()
+@@ -155,15 +159,17 @@ class MacTool:
+ 
+     def _DetectInputEncoding(self, file_name):
+         """Reads the first few bytes from file_name and tries to guess the text
+-        encoding. Returns None as a guess if it can't detect it."""
++    encoding. Returns None as a guess if it can't detect it."""
+         with open(file_name, "rb") as fp:
+             try:
+                 header = fp.read(3)
+             except Exception:
+                 return None
+-        if header.startswith((b"\xfe\xff", b"\xff\xfe")):
++        if header.startswith(b"\xFE\xFF"):
+             return "UTF-16"
+-        elif header.startswith(b"\xef\xbb\xbf"):
++        elif header.startswith(b"\xFF\xFE"):
++            return "UTF-16"
++        elif header.startswith(b"\xEF\xBB\xBF"):
+             return "UTF-8"
+         else:
+             return None
+@@ -254,9 +260,9 @@ class MacTool:
+ 
+     def ExecFilterLibtool(self, *cmd_list):
+         """Calls libtool and filters out '/path/to/libtool: file: foo.o has no
+-        symbols'."""
++    symbols'."""
+         libtool_re = re.compile(
+-            r"^.*libtool: (?:for architecture: \S* )?file: .* has no symbols$"
++            r"^.*libtool: (?:for architecture: \S* )?" r"file: .* has no symbols$"
+         )
+         libtool_re5 = re.compile(
+             r"^.*libtool: warning for library: "
+@@ -303,7 +309,7 @@ class MacTool:
+ 
+     def ExecPackageFramework(self, framework, version):
+         """Takes a path to Something.framework and the Current version of that and
+-        sets up all the symlinks."""
++    sets up all the symlinks."""
+         # Find the name of the binary based on the part before the ".framework".
+         binary = os.path.basename(framework).split(".")[0]
+ 
+@@ -332,7 +338,7 @@ class MacTool:
+ 
+     def _Relink(self, dest, link):
+         """Creates a symlink to |dest| named |link|. If |link| already exists,
+-        it is overwritten."""
++    it is overwritten."""
+         if os.path.lexists(link):
+             os.remove(link)
+         os.symlink(dest, link)
+@@ -357,14 +363,14 @@ class MacTool:
+     def ExecCompileXcassets(self, keys, *inputs):
+         """Compiles multiple .xcassets files into a single .car file.
+ 
+-        This invokes 'actool' to compile all the inputs .xcassets files. The
+-        |keys| arguments is a json-encoded dictionary of extra arguments to
+-        pass to 'actool' when the asset catalogs contains an application icon
+-        or a launch image.
++    This invokes 'actool' to compile all the inputs .xcassets files. The
++    |keys| arguments is a json-encoded dictionary of extra arguments to
++    pass to 'actool' when the asset catalogs contains an application icon
++    or a launch image.
+ 
+-        Note that 'actool' does not create the Assets.car file if the asset
+-        catalogs does not contains imageset.
+-        """
++    Note that 'actool' does not create the Assets.car file if the asset
++    catalogs does not contains imageset.
++    """
+         command_line = [
+             "xcrun",
+             "actool",
+@@ -437,13 +443,13 @@ class MacTool:
+     def ExecCodeSignBundle(self, key, entitlements, provisioning, path, preserve):
+         """Code sign a bundle.
+ 
+-        This function tries to code sign an iOS bundle, following the same
+-        algorithm as Xcode:
+-          1. pick the provisioning profile that best match the bundle identifier,
+-             and copy it into the bundle as embedded.mobileprovision,
+-          2. copy Entitlements.plist from user or SDK next to the bundle,
+-          3. code sign the bundle.
+-        """
++    This function tries to code sign an iOS bundle, following the same
++    algorithm as Xcode:
++      1. pick the provisioning profile that best match the bundle identifier,
++         and copy it into the bundle as embedded.mobileprovision,
++      2. copy Entitlements.plist from user or SDK next to the bundle,
++      3. code sign the bundle.
++    """
+         substitutions, overrides = self._InstallProvisioningProfile(
+             provisioning, self._GetCFBundleIdentifier()
+         )
+@@ -462,16 +468,16 @@ class MacTool:
+     def _InstallProvisioningProfile(self, profile, bundle_identifier):
+         """Installs embedded.mobileprovision into the bundle.
+ 
+-        Args:
+-          profile: string, optional, short name of the .mobileprovision file
+-            to use, if empty or the file is missing, the best file installed
+-            will be used
+-          bundle_identifier: string, value of CFBundleIdentifier from Info.plist
++    Args:
++      profile: string, optional, short name of the .mobileprovision file
++        to use, if empty or the file is missing, the best file installed
++        will be used
++      bundle_identifier: string, value of CFBundleIdentifier from Info.plist
+ 
+-        Returns:
+-          A tuple containing two dictionary: variables substitutions and values
+-          to overrides when generating the entitlements file.
+-        """
++    Returns:
++      A tuple containing two dictionary: variables substitutions and values
++      to overrides when generating the entitlements file.
++    """
+         source_path, provisioning_data, team_id = self._FindProvisioningProfile(
+             profile, bundle_identifier
+         )
+@@ -487,24 +493,24 @@ class MacTool:
+     def _FindProvisioningProfile(self, profile, bundle_identifier):
+         """Finds the .mobileprovision file to use for signing the bundle.
+ 
+-        Checks all the installed provisioning profiles (or if the user specified
+-        the PROVISIONING_PROFILE variable, only consult it) and select the most
+-        specific that correspond to the bundle identifier.
++    Checks all the installed provisioning profiles (or if the user specified
++    the PROVISIONING_PROFILE variable, only consult it) and select the most
++    specific that correspond to the bundle identifier.
+ 
+-        Args:
+-          profile: string, optional, short name of the .mobileprovision file
+-            to use, if empty or the file is missing, the best file installed
+-            will be used
+-          bundle_identifier: string, value of CFBundleIdentifier from Info.plist
++    Args:
++      profile: string, optional, short name of the .mobileprovision file
++        to use, if empty or the file is missing, the best file installed
++        will be used
++      bundle_identifier: string, value of CFBundleIdentifier from Info.plist
+ 
+-        Returns:
+-          A tuple of the path to the selected provisioning profile, the data of
+-          the embedded plist in the provisioning profile and the team identifier
+-          to use for code signing.
++    Returns:
++      A tuple of the path to the selected provisioning profile, the data of
++      the embedded plist in the provisioning profile and the team identifier
++      to use for code signing.
+ 
+-        Raises:
+-          SystemExit: if no .mobileprovision can be used to sign the bundle.
+-        """
++    Raises:
++      SystemExit: if no .mobileprovision can be used to sign the bundle.
++    """
+         profiles_dir = os.path.join(
+             os.environ["HOME"], "Library", "MobileDevice", "Provisioning Profiles"
+         )
+@@ -552,12 +558,12 @@ class MacTool:
+     def _LoadProvisioningProfile(self, profile_path):
+         """Extracts the plist embedded in a provisioning profile.
+ 
+-        Args:
+-          profile_path: string, path to the .mobileprovision file
++    Args:
++      profile_path: string, path to the .mobileprovision file
+ 
+-        Returns:
+-          Content of the plist embedded in the provisioning profile as a dictionary.
+-        """
++    Returns:
++      Content of the plist embedded in the provisioning profile as a dictionary.
++    """
+         with tempfile.NamedTemporaryFile() as temp:
+             subprocess.check_call(
+                 ["security", "cms", "-D", "-i", profile_path, "-o", temp.name]
+@@ -580,16 +586,16 @@ class MacTool:
+     def _LoadPlistMaybeBinary(self, plist_path):
+         """Loads into a memory a plist possibly encoded in binary format.
+ 
+-        This is a wrapper around plistlib.readPlist that tries to convert the
+-        plist to the XML format if it can't be parsed (assuming that it is in
+-        the binary format).
++    This is a wrapper around plistlib.readPlist that tries to convert the
++    plist to the XML format if it can't be parsed (assuming that it is in
++    the binary format).
+ 
+-        Args:
+-          plist_path: string, path to a plist file, in XML or binary format
++    Args:
++      plist_path: string, path to a plist file, in XML or binary format
+ 
+-        Returns:
+-          Content of the plist as a dictionary.
+-        """
++    Returns:
++      Content of the plist as a dictionary.
++    """
+         try:
+             # First, try to read the file using plistlib that only supports XML,
+             # and if an exception is raised, convert a temporary copy to XML and
+@@ -605,13 +611,13 @@ class MacTool:
+     def _GetSubstitutions(self, bundle_identifier, app_identifier_prefix):
+         """Constructs a dictionary of variable substitutions for Entitlements.plist.
+ 
+-        Args:
+-          bundle_identifier: string, value of CFBundleIdentifier from Info.plist
+-          app_identifier_prefix: string, value for AppIdentifierPrefix
++    Args:
++      bundle_identifier: string, value of CFBundleIdentifier from Info.plist
++      app_identifier_prefix: string, value for AppIdentifierPrefix
+ 
+-        Returns:
+-          Dictionary of substitutions to apply when generating Entitlements.plist.
+-        """
++    Returns:
++      Dictionary of substitutions to apply when generating Entitlements.plist.
++    """
+         return {
+             "CFBundleIdentifier": bundle_identifier,
+             "AppIdentifierPrefix": app_identifier_prefix,
+@@ -620,9 +626,9 @@ class MacTool:
+     def _GetCFBundleIdentifier(self):
+         """Extracts CFBundleIdentifier value from Info.plist in the bundle.
+ 
+-        Returns:
+-          Value of CFBundleIdentifier in the Info.plist located in the bundle.
+-        """
++    Returns:
++      Value of CFBundleIdentifier in the Info.plist located in the bundle.
++    """
+         info_plist_path = os.path.join(
+             os.environ["TARGET_BUILD_DIR"], os.environ["INFOPLIST_PATH"]
+         )
+@@ -632,19 +638,19 @@ class MacTool:
+     def _InstallEntitlements(self, entitlements, substitutions, overrides):
+         """Generates and install the ${BundleName}.xcent entitlements file.
+ 
+-        Expands variables "$(variable)" pattern in the source entitlements file,
+-        add extra entitlements defined in the .mobileprovision file and the copy
+-        the generated plist to "${BundlePath}.xcent".
++    Expands variables "$(variable)" pattern in the source entitlements file,
++    add extra entitlements defined in the .mobileprovision file and the copy
++    the generated plist to "${BundlePath}.xcent".
+ 
+-        Args:
+-          entitlements: string, optional, path to the Entitlements.plist template
+-            to use, defaults to "${SDKROOT}/Entitlements.plist"
+-          substitutions: dictionary, variable substitutions
+-          overrides: dictionary, values to add to the entitlements
++    Args:
++      entitlements: string, optional, path to the Entitlements.plist template
++        to use, defaults to "${SDKROOT}/Entitlements.plist"
++      substitutions: dictionary, variable substitutions
++      overrides: dictionary, values to add to the entitlements
+ 
+-        Returns:
+-          Path to the generated entitlements file.
+-        """
++    Returns:
++      Path to the generated entitlements file.
++    """
+         source_path = entitlements
+         target_path = os.path.join(
+             os.environ["BUILT_PRODUCTS_DIR"], os.environ["PRODUCT_NAME"] + ".xcent"
+@@ -664,15 +670,15 @@ class MacTool:
+     def _ExpandVariables(self, data, substitutions):
+         """Expands variables "$(variable)" in data.
+ 
+-        Args:
+-          data: object, can be either string, list or dictionary
+-          substitutions: dictionary, variable substitutions to perform
++    Args:
++      data: object, can be either string, list or dictionary
++      substitutions: dictionary, variable substitutions to perform
+ 
+-        Returns:
+-          Copy of data where each references to "$(variable)" has been replaced
+-          by the corresponding value found in substitutions, or left intact if
+-          the key was not found.
+-        """
++    Returns:
++      Copy of data where each references to "$(variable)" has been replaced
++      by the corresponding value found in substitutions, or left intact if
++      the key was not found.
++    """
+         if isinstance(data, str):
+             for key, value in substitutions.items():
+                 data = data.replace("$(%s)" % key, value)
+@@ -691,15 +697,15 @@ def NextGreaterPowerOf2(x):
+ def WriteHmap(output_name, filelist):
+     """Generates a header map based on |filelist|.
+ 
+-    Per Mark Mentovai:
+-      A header map is structured essentially as a hash table, keyed by names used
+-      in #includes, and providing pathnames to the actual files.
++  Per Mark Mentovai:
++    A header map is structured essentially as a hash table, keyed by names used
++    in #includes, and providing pathnames to the actual files.
+ 
+-    The implementation below and the comment above comes from inspecting:
+-      http://www.opensource.apple.com/source/distcc/distcc-2503/distcc_dist/include_server/headermap.py?txt
+-    while also looking at the implementation in clang in:
+-      https://llvm.org/svn/llvm-project/cfe/trunk/lib/Lex/HeaderMap.cpp
+-    """
++  The implementation below and the comment above comes from inspecting:
++    http://www.opensource.apple.com/source/distcc/distcc-2503/distcc_dist/include_server/headermap.py?txt
++  while also looking at the implementation in clang in:
++    https://llvm.org/svn/llvm-project/cfe/trunk/lib/Lex/HeaderMap.cpp
++  """
+     magic = 1751998832
+     version = 1
+     _reserved = 0
+diff --git a/node_modules/node-mac-contacts/build/node_modules/node-addon-api/node_api.Makefile b/node_modules/node-mac-contacts/build/node_modules/node-addon-api/node_api.Makefile
+new file mode 100644
+index 0000000..466a6f7
+--- /dev/null
++++ b/node_modules/node-mac-contacts/build/node_modules/node-addon-api/node_api.Makefile
+@@ -0,0 +1,6 @@
++# This file is generated by gyp; do not edit.
++
++export builddir_name ?= ./build/node_modules/node-addon-api/.
++.PHONY: all
++all:
++	$(MAKE) -C ../.. nothing
+diff --git a/node_modules/node-mac-contacts/node-addon-api/nothing.target.mk b/node_modules/node-mac-contacts/build/node_modules/node-addon-api/nothing.target.mk
+similarity index 65%
+rename from node_modules/node-mac-contacts/node-addon-api/nothing.target.mk
+rename to node_modules/node-mac-contacts/build/node_modules/node-addon-api/nothing.target.mk
+index 13e913e..a2cecdc 100644
+--- a/node_modules/node-mac-contacts/node-addon-api/nothing.target.mk
++++ b/node_modules/node-mac-contacts/build/node_modules/node-addon-api/nothing.target.mk
+@@ -7,21 +7,30 @@ DEFS_Debug := \
+ 	'-DUSING_UV_SHARED=1' \
+ 	'-DUSING_V8_SHARED=1' \
+ 	'-DV8_DEPRECATION_WARNINGS=1' \
++	'-DV8_DEPRECATION_WARNINGS' \
++	'-DV8_IMMINENT_DEPRECATION_WARNINGS' \
+ 	'-D_GLIBCXX_USE_CXX11_ABI=1' \
+-	'-D_FILE_OFFSET_BITS=64' \
++	'-DELECTRON_ENSURE_CONFIG_GYPI' \
+ 	'-D_DARWIN_USE_64_BIT_INODE=1' \
+ 	'-D_LARGEFILE_SOURCE' \
++	'-D_FILE_OFFSET_BITS=64' \
++	'-DUSING_ELECTRON_CONFIG_GYPI' \
++	'-DV8_COMPRESS_POINTERS' \
++	'-DV8_COMPRESS_POINTERS_IN_SHARED_CAGE' \
++	'-DV8_ENABLE_SANDBOX' \
++	'-DV8_31BIT_SMIS_ON_64BIT_ARCH' \
+ 	'-DOPENSSL_NO_PINSHARED' \
+ 	'-DOPENSSL_THREADS' \
++	'-DOPENSSL_NO_ASM' \
+ 	'-DDEBUG' \
+-	'-D_DEBUG'
++	'-D_DEBUG' \
++	'-DV8_ENABLE_CHECKS'
+ 
+ # Flags passed to all source files.
+ CFLAGS_Debug := \
+ 	-O0 \
+ 	-gdwarf-2 \
+-	-fno-strict-aliasing \
+-	-mmacosx-version-min=13.5 \
++	-mmacosx-version-min=10.15 \
+ 	-arch \
+ 	arm64 \
+ 	-Wall \
+@@ -30,14 +39,16 @@ CFLAGS_Debug := \
+ 	-Wno-unused-parameter
+ 
+ # Flags passed to only C files.
+-CFLAGS_C_Debug :=
++CFLAGS_C_Debug := \
++	-fno-strict-aliasing
+ 
+ # Flags passed to only C++ files.
+ CFLAGS_CC_Debug := \
+-	-std=gnu++20 \
++	-std=gnu++17 \
+ 	-stdlib=libc++ \
+ 	-fno-rtti \
+-	-fno-exceptions
++	-fno-exceptions \
++	-fno-strict-aliasing
+ 
+ # Flags passed to only ObjC files.
+ CFLAGS_OBJC_Debug :=
+@@ -46,32 +57,40 @@ CFLAGS_OBJC_Debug :=
+ CFLAGS_OBJCC_Debug :=
+ 
+ INCS_Debug := \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/src \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/openssl/config \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/openssl/openssl/include \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/uv/include \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/zlib \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/v8/include
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/include/node \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/src \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/openssl/config \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/openssl/openssl/include \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/uv/include \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/zlib \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/v8/include
+ 
+ DEFS_Release := \
+ 	'-DNODE_GYP_MODULE_NAME=nothing' \
+ 	'-DUSING_UV_SHARED=1' \
+ 	'-DUSING_V8_SHARED=1' \
+ 	'-DV8_DEPRECATION_WARNINGS=1' \
++	'-DV8_DEPRECATION_WARNINGS' \
++	'-DV8_IMMINENT_DEPRECATION_WARNINGS' \
+ 	'-D_GLIBCXX_USE_CXX11_ABI=1' \
+-	'-D_FILE_OFFSET_BITS=64' \
++	'-DELECTRON_ENSURE_CONFIG_GYPI' \
+ 	'-D_DARWIN_USE_64_BIT_INODE=1' \
+ 	'-D_LARGEFILE_SOURCE' \
++	'-D_FILE_OFFSET_BITS=64' \
++	'-DUSING_ELECTRON_CONFIG_GYPI' \
++	'-DV8_COMPRESS_POINTERS' \
++	'-DV8_COMPRESS_POINTERS_IN_SHARED_CAGE' \
++	'-DV8_ENABLE_SANDBOX' \
++	'-DV8_31BIT_SMIS_ON_64BIT_ARCH' \
+ 	'-DOPENSSL_NO_PINSHARED' \
+-	'-DOPENSSL_THREADS'
++	'-DOPENSSL_THREADS' \
++	'-DOPENSSL_NO_ASM'
+ 
+ # Flags passed to all source files.
+ CFLAGS_Release := \
+ 	-O3 \
+ 	-gdwarf-2 \
+-	-fno-strict-aliasing \
+-	-mmacosx-version-min=13.5 \
++	-mmacosx-version-min=10.15 \
+ 	-arch \
+ 	arm64 \
+ 	-Wall \
+@@ -80,14 +99,16 @@ CFLAGS_Release := \
+ 	-Wno-unused-parameter
+ 
+ # Flags passed to only C files.
+-CFLAGS_C_Release :=
++CFLAGS_C_Release := \
++	-fno-strict-aliasing
+ 
+ # Flags passed to only C++ files.
+ CFLAGS_CC_Release := \
+-	-std=gnu++20 \
++	-std=gnu++17 \
+ 	-stdlib=libc++ \
+ 	-fno-rtti \
+-	-fno-exceptions
++	-fno-exceptions \
++	-fno-strict-aliasing
+ 
+ # Flags passed to only ObjC files.
+ CFLAGS_OBJC_Release :=
+@@ -96,16 +117,16 @@ CFLAGS_OBJC_Release :=
+ CFLAGS_OBJCC_Release :=
+ 
+ INCS_Release := \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/include/node \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/src \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/openssl/config \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/openssl/openssl/include \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/uv/include \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/zlib \
+-	-I/Users/rikhilkokal/Library/Caches/node-gyp/24.13.0/deps/v8/include
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/include/node \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/src \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/openssl/config \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/openssl/openssl/include \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/uv/include \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/zlib \
++	-I/Users/rikhilkokal/.electron-gyp/29.4.6/deps/v8/include
+ 
+ OBJS := \
+-	$(obj).target/$(TARGET)/../node-addon-api/nothing.o
++	$(obj).target/$(TARGET)/node_modules/node-addon-api/nothing.o
+ 
+ # Add to the list of files we specially track dependencies for.
+ all_deps += $(OBJS)
+@@ -134,7 +155,7 @@ $(obj).$(TOOLSET)/$(TARGET)/%.o: $(obj)/%.c FORCE_DO_CMD
+ # End of this set of suffix rules
+ ### Rules for final target.
+ LDFLAGS_Debug := \
+-	-mmacosx-version-min=13.5 \
++	-mmacosx-version-min=10.15 \
+ 	-arch \
+ 	arm64 \
+ 	-L$(builddir) \
+@@ -143,7 +164,7 @@ LDFLAGS_Debug := \
+ LIBTOOLFLAGS_Debug :=
+ 
+ LDFLAGS_Release := \
+-	-mmacosx-version-min=13.5 \
++	-mmacosx-version-min=10.15 \
+ 	-arch \
+ 	arm64 \
+ 	-L$(builddir) \
+diff --git a/node_modules/node-mac-contacts/contacts.mm b/node_modules/node-mac-contacts/contacts.mm
+index 0fa950c..378fa24 100644
+--- a/node_modules/node-mac-contacts/contacts.mm
++++ b/node_modules/node-mac-contacts/contacts.mm
+@@ -450,7 +450,8 @@ CNAuthorizationStatus AuthStatus() {
+     std::string status = AuthStatusString();
+ 
+     if (status == "Not Determined") {
+-      __block Napi::ThreadSafeFunction tsfn = ts_fn;
++      auto ts_fn_ptr = std::make_shared<Napi::ThreadSafeFunction>(std::move(ts_fn));
++      __block auto tsfn = ts_fn_ptr;
+       CNContactStore *store = [CNContactStore new];
+       [store requestAccessForEntityType:CNEntityTypeContacts
+                       completionHandler:^(BOOL granted, NSError *error) {
+@@ -458,9 +459,9 @@ CNAuthorizationStatus AuthStatus() {
+                                             const char *granted) {
+                           deferred.Resolve(Napi::String::New(env, granted));
+                         };
+-                        tsfn.BlockingCall(granted ? "Authorized" : "Denied",
+-                                          callback);
+-                        tsfn.Release();
++                        tsfn->BlockingCall(granted ? "Authorized" : "Denied",
++                                           callback);
++                        tsfn->Release();
+                       }];
+     } else if (status == "Denied") {
+       NSWorkspace *workspace = [[NSWorkspace alloc] init];
+@@ -489,62 +490,85 @@ CNAuthorizationStatus AuthStatus() {
+   return Napi::Value::From(env, AuthStatusString());
+ }
+ 
+-// Returns an array of all a user's Contacts as objects.
+-Napi::Array GetAllContacts(const Napi::CallbackInfo &info) {
+-  Napi::Env env = info.Env();
+-
+-  if (AuthStatus() != CNAuthorizationStatusAuthorized)
+-    return Napi::Array::New(env);
+-
+-  if (!contacts_ref.IsEmpty())
+-    return contacts_ref.Value();
+-
+-  CNContactStore *addressBook = [[CNContactStore alloc] init];
+-  Napi::Array extra_keys = info[0].As<Napi::Array>();
+-
+-  NSError *error = nil;
+-  NSArray *containers = [addressBook containersMatchingPredicate:nil
+-                                                           error:&error];
+-  if (error != nil) {
+-    std::string err_msg = std::string([error.localizedDescription UTF8String]);
+-    Napi::Error::New(env, "Failed to fetch address book container: " + err_msg)
+-        .ThrowAsJavaScriptException();
+-    return Napi::Array::New(env);
++// Async worker: fetches all contacts on a libuv thread-pool thread so the
++// Electron main thread's run loop stays free (avoids XPC/contactsd deadlock).
++class GetAllContactsWorker : public Napi::AsyncWorker {
++ public:
++  GetAllContactsWorker(Napi::Env env, NSArray *keys)
++      : Napi::AsyncWorker(env),
++        deferred_(Napi::Promise::Deferred::New(env)),
++        keys_(keys),
++        fetched_(nil) {}
++
++  Napi::Promise Promise() { return deferred_.Promise(); }
++
++  void Execute() override {
++    CNContactStore *store = [[CNContactStore alloc] init];
++    NSError *error = nil;
++    NSArray *containers = [store containersMatchingPredicate:nil error:&error];
++    if (error != nil) {
++      error_msg_ = std::string([error.localizedDescription UTF8String]);
++      return;
++    }
++    NSMutableSet *set = [[NSMutableSet alloc] init];
++    for (CNContainer *c in containers) {
++      NSPredicate *pred =
++          [CNContact predicateForContactsInContainerWithIdentifier:c.identifier];
++      NSArray *batch = [store unifiedContactsMatchingPredicate:pred
++                                                   keysToFetch:keys_
++                                                         error:&error];
++      if (error != nil) {
++        error_msg_ = std::string([error.localizedDescription UTF8String]);
++        return;
++      }
++      [set addObjectsFromArray:batch];
++    }
++    fetched_ = [set allObjects];
+   }
+ 
+-  // This is a set so that contacts in multiple containers aren't duplicated.
+-  NSMutableSet *unordered_contacts = [[NSMutableSet alloc] init];
+-  int num_containers = [containers count];
+-  for (int idx = 0; idx < num_containers; idx++) {
+-    CNContainer *container = [containers objectAtIndex:idx];
+-    NSPredicate *predicate = [CNContact
+-        predicateForContactsInContainerWithIdentifier:[container identifier]];
+-    NSArray *container_contacts =
+-        [addressBook unifiedContactsMatchingPredicate:predicate
+-                                          keysToFetch:GetContactKeys(extra_keys)
+-                                                error:&error];
+-    if (error != nil) {
+-      std::string err_msg =
+-          std::string([error.localizedDescription UTF8String]);
+-      Napi::Error::New(env, "Failed to fetch contacts: " + err_msg)
+-          .ThrowAsJavaScriptException();
+-      return Napi::Array::New(env);
++  void OnOK() override {
++    Napi::Env env = Env();
++    if (!error_msg_.empty()) {
++      deferred_.Reject(Napi::Error::New(env, error_msg_).Value());
++      return;
+     }
++    Napi::Array contacts = Napi::Array::New(env);
++    if (fetched_ != nil) {
++      for (NSUInteger i = 0; i < fetched_.count; i++) {
++        contacts[i] = CreateContact(env, [fetched_ objectAtIndex:i]);
++      }
++    }
++    deferred_.Resolve(contacts);
++  }
+ 
+-    [unordered_contacts addObjectsFromArray:container_contacts];
++  void OnError(const Napi::Error &err) override {
++    deferred_.Reject(err.Value());
+   }
+ 
+-  Napi::Array contacts = Napi::Array::New(env);
+-  NSArray *cncontacts = [unordered_contacts allObjects];
+-  int num_contacts = [cncontacts count];
+-  for (int i = 0; i < num_contacts; i++) {
+-    CNContact *cncontact = [cncontacts objectAtIndex:i];
+-    contacts[i] = CreateContact(env, cncontact);
++ private:
++  Napi::Promise::Deferred deferred_;
++  NSArray *keys_;
++  NSArray *fetched_;
++  std::string error_msg_;
++};
++
++// Returns a Promise resolving to an array of all Contacts as objects.
++Napi::Value GetAllContacts(const Napi::CallbackInfo &info) {
++  Napi::Env env = info.Env();
++
++  if (AuthStatus() != CNAuthorizationStatusAuthorized) {
++    auto deferred = Napi::Promise::Deferred::New(env);
++    deferred.Resolve(Napi::Array::New(env));
++    return deferred.Promise();
+   }
+ 
+-  contacts_ref = Napi::Persistent(contacts);
++  Napi::Array extra_keys =
++      info[0].IsArray() ? info[0].As<Napi::Array>() : Napi::Array::New(env);
++  NSArray *keys = GetContactKeys(extra_keys);
+ 
+-  return contacts;
++  auto *worker = new GetAllContactsWorker(env, keys);
++  worker->Queue();
++  return worker->Promise();
+ }
+ 
+ // Returns an array of all Contacts as objects matching a specified string name.
+diff --git a/node_modules/node-mac-contacts/node-addon-api/node_api.Makefile b/node_modules/node-mac-contacts/node-addon-api/node_api.Makefile
+deleted file mode 100644
+index 73a7e58..0000000
+--- a/node_modules/node-mac-contacts/node-addon-api/node_api.Makefile
++++ /dev/null
+@@ -1,6 +0,0 @@
+-# This file is generated by gyp; do not edit.
+-
+-export builddir_name ?= ./build/../node-addon-api/.
+-.PHONY: all
+-all:
+-	$(MAKE) -C ../build nothing

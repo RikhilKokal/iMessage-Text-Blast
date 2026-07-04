@@ -2,8 +2,8 @@
   <div class="overlay" @click.self="$emit('close')">
     <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dlg-title">
       <div class="icon">⚠️</div>
-      <h2 id="dlg-title">Delete Group?</h2>
-      <p>You're about to permanently delete "<strong>{{ groupName }}</strong>". This action cannot be undone.</p>
+      <h2 id="dlg-title">Delete {{ itemType }}?</h2>
+      <p>You're about to permanently delete "<strong>{{ itemName }}</strong>". This action cannot be undone.</p>
       <div class="buttons">
         <button @click="$emit('close')">Cancel</button>
         <button class="btn-danger" @click="$emit('confirm')">Delete</button>
@@ -14,7 +14,10 @@
 
 <script setup>
 import { onMounted, onUnmounted } from 'vue'
-defineProps({ groupName: String })
+defineProps({
+  itemName: { type: String, required: true },
+  itemType: { type: String, default: 'Group' },
+})
 const emit = defineEmits(['confirm', 'close'])
 function onKeydown(e) { if (e.key === 'Escape') emit('close') }
 onMounted(() => window.addEventListener('keydown', onKeydown))

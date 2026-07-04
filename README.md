@@ -28,15 +28,33 @@ Send a templated message to dozens of contacts at once, schedule sends for later
 
 ## Requirements
 
-- macOS (this app relies on Messages.app, Contacts, and AppleScript automation — it will not run on Windows/Linux)
+- macOS 11.0 (Big Sur) or later — required by Electron 29; will not run on Windows/Linux
 
 ## Installation
 
-1. Download the `.dmg` from the [Releases](../../releases) page.
-2. Open the `.dmg` and drag **iMessage Text Blast** into your Applications folder.
-3. Launch the app from Applications (or Spotlight).
+### Which version to download
 
-> **Note:** Since this app isn't signed with an Apple Developer ID, macOS Gatekeeper will flag it as from an "unidentified developer" the first time you open it. Right-click (or Control-click) the app and choose **Open**, then confirm in the dialog that appears. You only need to do this once.
+The Releases page has two downloads — one for Apple Silicon Macs and one for Intel Macs. To find out which chip your Mac has:
+
+1. Click the  menu in the top-left corner of your screen.
+2. Select **About This Mac**.
+3. Look at the **Chip** (Apple Silicon) or **Processor** (Intel) line:
+   - If it says **Apple M1**, **M2**, **M3**, **M4** (or any variant) → download `iMessage Text Blast-x.x.x-arm64.dmg`
+   - If it says **Intel** → download `iMessage Text Blast-x.x.x.dmg`
+
+### Steps
+
+1. Download the correct `.dmg` for your Mac from the [Releases](../../releases) page.
+2. Open the `.dmg` and drag **iMessage Text Blast** into your Applications folder.
+3. Open **Terminal** (search "Terminal" in Spotlight) and run the following command:
+
+   ```
+   xattr -r -d com.apple.quarantine "/Applications/iMessage Text Blast.app"
+   ```
+
+   **AFTER DRAGGING THE APP TO APPLICATIONS, YOU MUST RUN THIS COMMAND IN TERMINAL BEFORE OPENING THE APP. WITHOUT IT, MACOS WILL SAY THE APP IS DAMAGED AND PREVENT IT FROM OPENING.**
+
+4. Launch the app from Applications (or Spotlight).
 
 On first run, macOS will prompt you to grant the following permissions:
 
@@ -62,7 +80,7 @@ To build your own `.dmg`:
 npm run build
 ```
 
-This builds the Vue frontend with Vite and packages the app with `electron-builder`, producing a `.dmg` and `.zip` in `release/`.
+This builds the Vue frontend with Vite and packages the app with `electron-builder`, producing a `.dmg` and `.zip` in `dist/`.
 
 Requires Node.js 18+ and Xcode Command Line Tools (for native module compilation).
 
@@ -87,6 +105,27 @@ src/
 3. If Full Disk Access is granted, it polls `chat.db` to detect whether the message actually delivered via iMessage or failed.
 4. On failure, it automatically retries via SMS and marks the contact as SMS-preferred for future sends.
 5. Scheduled and buffered sends run in detached background processes so they complete even if the app is closed or quit mid-send.
+
+## Privacy
+
+iMessage Text Blast is designed with privacy as a core principle. All data stays on your device — nothing is ever transmitted to an external server.
+
+**What the app stores locally:**
+- Contacts you import (synced from your macOS Contacts app or a CSV file)
+- Groups and their members
+- Message templates
+- Send history and delivery status
+- Scheduled sends
+
+All of this is stored in a SQLite database on your machine. No cloud account, no sync, no backend.
+
+**What the app never does:**
+- Transmit your contacts, messages, or any personal data to any server
+- Read the content of your existing messages (only delivery metadata from `chat.db`)
+- Store your Apple ID, iCloud credentials, or any authentication tokens
+- Run in the background beyond completing an in-progress scheduled or buffered send
+
+The source code is fully open — you can audit exactly what the app does at any time.
 
 ## License
 

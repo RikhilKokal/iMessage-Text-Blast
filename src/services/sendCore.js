@@ -19,36 +19,27 @@ const path = require('path')
 const execFileAsync = promisify(execFile)
 
 // ── AppleScripts ──────────────────────────────────────────────────────────────
+// iMessage and SMS sends use identical AppleScript apart from the service type,
+// so both are generated from one template.
 
-const IMESSAGE_SCRIPT = `\
+function buildSendScript(serviceType) {
+  return `\
 on run argv
   set msgText  to item 1 of argv
   set msgPhone to item 2 of argv
   tell application "Messages"
-    set theSvc   to first service whose service type = iMessage
+    set theSvc   to first service whose service type = ${serviceType}
     set theBuddy to buddy msgPhone of theSvc
     send msgText to theBuddy
   end tell
   return "ok"
 end run`
-
-
-const SMS_SCRIPT = `\
-on run argv
-  set msgText  to item 1 of argv
-  set msgPhone to item 2 of argv
-  tell application "Messages"
-    set theSvc   to first service whose service type = SMS
-    set theBuddy to buddy msgPhone of theSvc
-    send msgText to theBuddy
-  end tell
-  return "ok"
-end run`
+}
 
 const IMESSAGE_SCRIPT_PATH = path.join(os.tmpdir(), 'imsg_bulk_imessage.applescript')
 const SMS_SCRIPT_PATH      = path.join(os.tmpdir(), 'imsg_bulk_sms.applescript')
-fs.writeFileSync(IMESSAGE_SCRIPT_PATH, IMESSAGE_SCRIPT, 'utf8')
-fs.writeFileSync(SMS_SCRIPT_PATH,      SMS_SCRIPT,      'utf8')
+fs.writeFileSync(IMESSAGE_SCRIPT_PATH, buildSendScript('iMessage'), 'utf8')
+fs.writeFileSync(SMS_SCRIPT_PATH,      buildSendScript('SMS'),      'utf8')
 
 // ── Phone normalisation ───────────────────────────────────────────────────────
 
@@ -358,4 +349,55 @@ INSERT INTO send_history_recipients (send_history_id, name, phone, received) VAL
   ${rows.join(',\n  ')};`
 }
 
-module.exports = { sendToGroup, sendMessage, renderTemplate, normalisePhone, buildSendHistorySQL, BUFFER_DONE_PATH }
+// ── Next-run calculator ────────────────────────────────────────────────────────
+// Shared by schedulingService.js (Electron main process, handles 'once' + 'recurring')
+// and scheduled-send-helper.js (detached launchd process, only ever calls this with
+// scheduleType 'recurring' since one-time sends are deactivated after firing once).
+
+/**
+ * Calculate the next Date a schedule should fire.
+ * @param {'once'|'recurring'} scheduleType
+ * @param {{ dateTime?: string, interval?: string, time?: string, weekday?: number, monthDay?: number }} scheduleData
+ */
+function calculateNextRun(scheduleType, scheduleData) {
+  if (scheduleType === 'once') {
+    const d = new Date(scheduleData.dateTime)
+    if (isNaN(d.getTime())) throw new Error('Invalid dateTime: ' + scheduleData.dateTime)
+    return d
+  }
+
+  if (scheduleType === 'recurring') {
+    const [hours, minutes] = (scheduleData.time || '09:00').split(':').map(Number)
+    const now = new Date()
+
+    if (scheduleData.interval === 'daily') {
+      const nextRun = new Date(now)
+      nextRun.setHours(hours, minutes, 0, 0)
+      if (nextRun <= now) nextRun.setDate(nextRun.getDate() + 1)
+      return nextRun
+    }
+
+    if (scheduleData.interval === 'weekly') {
+      const targetDay = scheduleData.weekday ?? now.getDay()
+      const nextRun = new Date(now)
+      nextRun.setHours(hours, minutes, 0, 0)
+      let daysAhead = (targetDay - now.getDay() + 7) % 7
+      if (daysAhead === 0 && nextRun <= now) daysAhead = 7
+      nextRun.setDate(now.getDate() + daysAhead)
+      return nextRun
+    }
+
+    if (scheduleData.interval === 'monthly') {
+      const targetDate = scheduleData.monthDay ?? now.getDate()
+      const nextRun = new Date(now)
+      nextRun.setDate(targetDate)
+      nextRun.setHours(hours, minutes, 0, 0)
+      if (nextRun <= now) nextRun.setMonth(nextRun.getMonth() + 1)
+      return nextRun
+    }
+  }
+
+  throw new Error(`Unknown schedule type: ${scheduleType}`)
+}
+
+module.exports = { sendToGroup, sendMessage, renderTemplate, normalisePhone, buildSendHistorySQL, calculateNextRun, BUFFER_DONE_PATH }

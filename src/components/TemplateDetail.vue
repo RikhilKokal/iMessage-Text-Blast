@@ -99,7 +99,7 @@
               :class="{ selected: selectedContactIds.has(c.id) }"
               @click="toggleContact(c.id)"
             >
-              <span class="contact-check" :class="{ checked: selectedContactIds.has(c.id) }"></span>
+              <span class="round-check contact-check" :class="{ checked: selectedContactIds.has(c.id) }"></span>
               <div class="contact-info">
                 <div class="contact-name">{{ c.name }}</div>
                 <div class="contact-phone">{{ c.phone }}</div>
@@ -154,7 +154,7 @@
               class="group-check-row"
               @click.prevent="selectedGroupIds.includes(g.id) ? selectedGroupIds.splice(selectedGroupIds.indexOf(g.id), 1) : selectedGroupIds.push(g.id)"
             >
-              <span class="group-check" :class="{ checked: selectedGroupIds.includes(g.id) }"></span>
+              <span class="round-check group-check" :class="{ checked: selectedGroupIds.includes(g.id) }"></span>
               <span class="group-check-name">{{ g.name }}</span>
               <span class="group-check-count">{{ g.memberCount }} {{ g.memberCount === 1 ? 'member' : 'members' }}</span>
             </label>
@@ -193,41 +193,21 @@
     </div>
 
     <!-- Unknown recipients warning -->
-    <div v-if="unknownWarning" class="overlay" @click.self="unknownWarning = null">
-      <div class="unknown-warning-box">
-        <h3>Messaging app unknown for some recipients</h3>
-        <p>
-          No message history found for <strong>{{ unknownWarning.names.join(', ') }}</strong>, so we can't tell if they use iMessage or SMS.
-        </p>
-        <p>
-          If you know, you can set it using the "Unknown" label next to their name. If not, don't worry.
-          <template v-if="props.hasFda">The message will still deliver, though you may see a brief error notification while it sends.</template>
-          <template v-else>The message may not deliver if the recipient uses SMS rather than iMessage.</template>
-        </p>
-        <div class="unknown-warning-actions">
-          <button @click="unknownWarning = null">Go Back</button>
-          <button class="btn-primary" @click="unknownWarning.proceed()">Send Anyway</button>
-        </div>
-        <div class="unknown-warning-never" @click="unknownWarningNeverCheck = !unknownWarningNeverCheck">
-          <span class="round-check" :class="{ checked: unknownWarningNeverCheck }"></span>
-          <span>Don't show again</span>
-        </div>
-      </div>
-    </div>
+    <UnknownRecipientWarningDialog
+      :warning="unknownWarning"
+      :hasFda="props.hasFda"
+      v-model:neverCheck="unknownWarningNeverCheck"
+      @cancel="unknownWarning = null"
+      @confirm="unknownWarning.proceed()"
+    />
 
-    <!-- Name-before-saving dialog -->
-    <!-- Delete confirm dialog -->
-    <div v-if="showDeleteDialog" class="overlay" @click.self="showDeleteDialog = false">
-      <div class="dialog">
-        <div class="dialog-icon">⚠️</div>
-        <h2 class="dialog-title">Delete Template?</h2>
-        <p class="dialog-body">You're about to permanently delete "<strong>{{ localName }}</strong>". This cannot be undone.</p>
-        <div class="dialog-actions">
-          <button class="btn-secondary" @click="showDeleteDialog = false">Cancel</button>
-          <button class="btn-primary btn-danger-confirm" @click="confirmDelete">Delete</button>
-        </div>
-      </div>
-    </div>
+    <DeleteConfirmDialog
+      v-if="showDeleteDialog"
+      :itemName="localName"
+      itemType="Template"
+      @confirm="confirmDelete"
+      @close="showDeleteDialog = false"
+    />
 
   </div>
 </template>
@@ -238,6 +218,10 @@ import TokenEditor        from './TokenEditor.vue'
 import MessagePreview     from './MessagePreview.vue'
 import AttachmentPicker   from './AttachmentPicker.vue'
 import BufferSecondsInput from './BufferSecondsInput.vue'
+import DeleteConfirmDialog from './DeleteConfirmDialog.vue'
+import UnknownRecipientWarningDialog from './UnknownRecipientWarningDialog.vue'
+import { useUnknownRecipientWarning, getUnconfirmedNames } from '../composables/useUnknownRecipientWarning'
+import { VARIABLES, TOKEN_LABELS } from '../constants/variables'
 
 const props = defineProps({
   template: { type: Object, required: true },
@@ -246,17 +230,6 @@ const props = defineProps({
   hasFda:   { type: Boolean, default: true },
 })
 const emit = defineEmits(['deleted', 'updated', 'renamed', 'draft', 'saved'])
-
-const VARIABLES = [
-  { key: 'firstName', label: 'First Name' },
-  { key: 'lastName',  label: 'Last Name'  },
-  { key: 'fullName',  label: 'Full Name'  },
-  { key: 'email',     label: 'Email'      },
-  { key: 'phone',     label: 'Phone'      },
-  { key: 'company',   label: 'Company'    },
-  { key: 'nickname',  label: 'Nickname'   },
-]
-const TOKEN_LABELS = Object.fromEntries(VARIABLES.map(v => [v.key, v.label]))
 
 const showToast = inject('addToast')
 
@@ -474,33 +447,18 @@ onUnmounted(() => {
   doSave({ showFeedback: false })
 })
 
-const unknownWarning = ref(null)
-const neverShowUnknownWarning = ref(localStorage.getItem('neverShowUnknownWarning') === 'true')
-const unknownWarningNeverCheck = ref(false)
+const { unknownWarning, unknownWarningNeverCheck, checkUnknownThenProceed: warnIfUnknown } = useUnknownRecipientWarning()
 
 function checkUnknownThenProceed(proceedFn) {
   const mode = sendMode.value
   let unknowns = []
   if (mode === 'contacts') {
-    unknowns = selectedContactObjects.value.filter(c => !c.service_confirmed)
+    unknowns = selectedContactObjects.value
   } else {
-    unknowns = selectedGroupIds.value
-      .flatMap(id => groupMembersCache.value[id] || [])
-      .filter(m => !m.service_confirmed)
+    unknowns = selectedGroupIds.value.flatMap(id => groupMembersCache.value[id] || [])
   }
-  if (!unknowns.length || neverShowUnknownWarning.value) { proceedFn(); return }
-  unknownWarningNeverCheck.value = false
-  unknownWarning.value = {
-    names: [...new Set(unknowns.map(m => m.name))],
-    proceed: () => {
-      if (unknownWarningNeverCheck.value) {
-        neverShowUnknownWarning.value = true
-        localStorage.setItem('neverShowUnknownWarning', 'true')
-      }
-      unknownWarning.value = null
-      proceedFn()
-    }
-  }
+  const names = getUnconfirmedNames(unknowns)
+  warnIfUnknown(names, proceedFn)
 }
 
 async function sendNow() {
@@ -706,37 +664,6 @@ async function sendNow() {
 .contact-result-row:hover { background: var(--bg); }
 .contact-result-row.selected { background: var(--accent-tint); }
 
-.contact-check,
-.group-check {
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 1.5px solid var(--border);
-  background: var(--surface);
-  cursor: pointer;
-  position: relative;
-  transition: background 0.15s, border-color 0.15s;
-}
-.contact-check.checked,
-.group-check.checked {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-.contact-check.checked::after,
-.group-check.checked::after {
-  content: '';
-  position: absolute;
-  left: 4px;
-  top: 2px;
-  width: 4px;
-  height: 7px;
-  border: 1.5px solid #fff;
-  border-top: none;
-  border-left: none;
-  transform: rotate(45deg);
-}
-
 .contact-info { flex: 1; min-width: 0; }
 .contact-name { font-size: 13px; font-weight: 500; }
 .contact-phone { font-size: 11px; color: var(--text-2); margin-top: 1px; }
@@ -814,104 +741,4 @@ async function sendNow() {
   margin-top: 4px;
 }
 
-/* ── Name dialog ── */
-.name-dialog { border-top: 4px solid var(--accent); }
-.name-dialog-input {
-  width: 100%;
-  font-size: 15px;
-  padding: 10px 12px;
-  border: 2px solid var(--accent);
-  border-radius: var(--radius);
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font);
-  outline: none;
-  box-sizing: border-box;
-}
-
-/* ── Delete dialog ── */
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10002;
-  backdrop-filter: blur(2px);
-}
-.dialog {
-  background: var(--surface);
-  border-radius: 12px;
-  border-top: 4px solid var(--danger);
-  width: min(400px, calc(100vw - 48px));
-  padding: 32px 28px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-  gap: 12px;
-}
-.dialog-icon { font-size: 44px; line-height: 1; }
-.dialog-title { font-size: 18px; font-weight: 700; color: var(--danger); }
-.dialog-body { font-size: 13px; color: var(--text-2); line-height: 1.6; }
-.dialog-body strong { color: var(--text); font-weight: 600; }
-.dialog-actions { display: flex; gap: 10px; margin-top: 8px; justify-content: center; }
-.btn-danger-confirm {
-  background: var(--danger);
-  border-color: var(--danger);
-  color: #fff;
-  padding: 8px 20px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  border: none;
-  font-family: var(--font);
-}
-.btn-danger-confirm:hover { background: var(--danger-h); }
-.btn-secondary {
-  padding: 8px 20px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  font-family: var(--font);
-}
-.btn-secondary:hover { background: var(--bg); }
-
-.unknown-warning-box {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 24px 28px 20px;
-  max-width: 420px;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.unknown-warning-box h3 { font-size: 16px; font-weight: 700; margin: 0; }
-.unknown-warning-box p  { font-size: 13px; line-height: 1.55; margin: 0; color: var(--text); }
-.unknown-warning-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 4px;
-}
-.unknown-warning-actions button { padding: 8px 18px; }
-.unknown-warning-never {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-2);
-  cursor: pointer;
-  user-select: none;
-}
 </style>

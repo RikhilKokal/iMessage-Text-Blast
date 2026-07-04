@@ -1,0 +1,32 @@
+/* ── Shared toggle switch ────────────────────────────────────────────────── */
+.toggle-switch {
+  flex-shrink: 0;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--border);
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  position: relative;
+  transition: background 0.2s;
+}
+.toggle-switch.on { background: #34c759; }
+.toggle-switch:hover { background: color-mix(in srgb, var(--border) 80%, #000 20%); }
+.toggle-switch.on:hover { background: #2db34a; }
+.toggle-switch:disabled { opacity: 0.4; cursor: default; }
+.toggle-switch:disabled:hover { background: var(--border); }
+
+.toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  display: block;
+}
+.toggle-switch.on .toggle-knob { transform: translateX(16px); }

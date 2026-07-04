@@ -1,14 +1,6 @@
 <template>
-  <div class="overlay" @click.self="$emit('close')">
-    <div class="panel">
-
-      <div class="panel-header">
-        <h2>Scheduled Texts</h2>
-        <div class="header-right">
-          <button class="btn-close" @click="$emit('close')" title="Close">×</button>
-        </div>
-      </div>
-
+  <DashboardPanel title="Scheduled Texts" @close="$emit('close')">
+    <template #notices>
       <!-- Sent notifications -->
       <div v-if="sentNotices.length > 0" class="notices">
         <div v-for="n in sentNotices" :key="n.id" class="notice">
@@ -22,9 +14,10 @@
           Canceled send to <strong>{{ n.group_name || 'group' }}</strong>
         </div>
       </div>
+    </template>
 
-      <div class="panel-body">
-        <div v-if="scheduledSends.length > 0" class="sends-list">
+    <template #default>
+      <div v-if="scheduledSends.length > 0" class="sends-list">
           <div
             v-for="send in scheduledSends"
             :key="send.id"
@@ -50,10 +43,9 @@
           </div>
         </div>
         <div v-else class="empty">No scheduled texts.</div>
-      </div>
+    </template>
 
-    </div>
-
+    <template #popups>
     <!-- Edit modal -->
     <div v-if="editing" class="confirm-overlay">
       <div class="edit-box">
@@ -222,14 +214,17 @@
         </div>
       </div>
     </div>
-  </div>
+    </template>
+  </DashboardPanel>
 </template>
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
+import DashboardPanel from './DashboardPanel.vue'
 import DateTimePicker from './DateTimePicker.vue'
 import TokenEditor    from './TokenEditor.vue'
 import MessagePreview from './MessagePreview.vue'
+import { VARIABLES, TOKEN_LABELS } from '../constants/variables'
 
 const props = defineProps({ refreshKey: { type: Number, default: 0 } })
 defineEmits(['close'])
@@ -346,17 +341,6 @@ onMounted(() => {
 onUnmounted(() => {
   clearInterval(pollTimer)
 })
-
-const VARIABLES = [
-  { key: 'firstName', label: 'First Name' },
-  { key: 'lastName',  label: 'Last Name'  },
-  { key: 'fullName',  label: 'Full Name'  },
-  { key: 'email',     label: 'Email'      },
-  { key: 'phone',     label: 'Phone'      },
-  { key: 'company',   label: 'Company'    },
-  { key: 'nickname',  label: 'Nickname'   },
-]
-const TOKEN_LABELS = Object.fromEntries(VARIABLES.map(v => [v.key, v.label]))
 
 // ── Edit ──────────────────────────────────────────────────────────────────────
 const editing              = ref(null)
@@ -564,53 +548,6 @@ function parsedInterval(raw) {
 </script>
 
 <style scoped>
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(2px);
-}
-
-.panel {
-  background: var(--surface);
-  border-radius: 12px;
-  width: min(620px, calc(100vw - 48px));
-  max-height: calc(100vh - 80px);
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
-  overflow: hidden;
-}
-
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
-  flex-shrink: 0;
-}
-.panel-header h2 { font-size: 17px; font-weight: 700; }
-
-.header-right { display: flex; align-items: center; gap: 12px; }
-
-.btn-close {
-  width: 28px; height: 28px;
-  border-radius: 50%;
-  border: none;
-  background: var(--border);
-  color: var(--text);
-  font-size: 18px;
-  display: flex; align-items: center; justify-content: center;
-  padding: 0; cursor: pointer;
-}
-.btn-close:hover { background: var(--text-2); color: #fff; }
-
 /* Sent notices */
 .notices {
   padding: 10px 24px 0;
@@ -812,6 +749,14 @@ function parsedInterval(raw) {
 .confirm-actions button { padding: 7px 16px; }
 .btn-danger { background: var(--error); color: #fff; border-color: var(--error); }
 .btn-danger:hover { opacity: 0.85; }
+
+.empty {
+  padding: 48px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-2);
+  font-style: italic;
+}
 
 /* Collapsible sections in edit modal */
 .collapsible {

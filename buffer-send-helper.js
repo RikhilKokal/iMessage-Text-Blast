@@ -19,7 +19,6 @@
 const path = require('path')
 const os   = require('os')
 const fs   = require('fs')
-const { execSync } = require('child_process')
 
 const payloadPath = process.argv[2]
 if (!payloadPath) {
@@ -32,33 +31,15 @@ const APP_DB_PATH  = path.join(os.homedir(), 'Library', 'Application Support', '
 
 // ── sqlite3 CLI adapters ──────────────────────────────────────────────────────
 
-function dbExec(sql) {
-  const tmpSql = path.join(os.tmpdir(), `imsg-buffer-exec-${Date.now()}.sql`)
-  fs.writeFileSync(tmpSql, sql, 'utf8')
-  try {
-    execSync(`sqlite3 "${APP_DB_PATH}" < "${tmpSql}"`, { shell: '/bin/bash', timeout: 10000 })
-  } catch (err) {
-    throw new Error(`sqlite3 exec failed: ${err.stderr?.toString() || err.message}`)
-  } finally {
-    try { fs.unlinkSync(tmpSql) } catch (_) {}
-  }
-}
+const { createSqliteCliAdapter } = require('./src/services/sqliteCliAdapter')
+const { dbSelect, dbExec } = createSqliteCliAdapter({
+  selectTmpPrefix: 'imsg-buffer-helper',
+  execTmpPrefix:   'imsg-buffer-exec',
+  execDbPath:      APP_DB_PATH,
+})
 
 function chatDbQuery(sql) {
-  const tmpSql = path.join(os.tmpdir(), `imsg-buffer-helper-${Date.now()}.sql`)
-  fs.writeFileSync(tmpSql, sql, 'utf8')
-  try {
-    const out = execSync(
-      `sqlite3 -separator $'\\t' "${CHAT_DB_PATH}" < "${tmpSql}"`,
-      { shell: '/bin/bash', timeout: 10000 }
-    ).toString().trim()
-    if (!out) return []
-    return out.split('\n').map(row => row.split('\t'))
-  } catch (err) {
-    throw new Error(`sqlite3 query failed: ${err.stderr?.toString() || err.message}`)
-  } finally {
-    try { fs.unlinkSync(tmpSql) } catch (_) {}
-  }
+  return dbSelect(sql, CHAT_DB_PATH)
 }
 
 // ── sendCore ──────────────────────────────────────────────────────────────────

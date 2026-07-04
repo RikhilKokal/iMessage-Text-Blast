@@ -1,137 +1,215 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
+// Electron's sandboxed preload context can't require() local project files (only the
+// 'electron' module is available here), so this must be kept in sync by hand with
+// src/shared/ipcChannels.js — the canonical definition used by index.js.
+const CH = {
+  CONTACTS_DIAGNOSE:        'contacts:diagnose',
+  CONTACTS_SYNC_FROM_MACOS: 'contacts:syncFromMacOS',
+  CONTACTS_GET_ME:          'contacts:getMe',
+  CONTACTS_IMPORT_CSV:      'contacts:importCSV',
+  CONTACTS_CHECK_CAPABILITY: 'contacts:checkCapability',
+
+  DB_GET_CONTACTS:          'db:getContacts',
+  DB_GET_CONTACTS_BY_IDS:   'db:getContactsByIds',
+  DB_ADD_CONTACT:           'db:addContact',
+  DB_DELETE_CONTACT:        'db:deleteContact',
+
+  DB_CREATE_GROUP:          'db:createGroup',
+  DB_GET_GROUPS:            'db:getGroups',
+  DB_GET_GROUP_BY_ID:       'db:getGroupById',
+  DB_UPDATE_GROUP_NAME:     'db:updateGroupName',
+  DB_DELETE_GROUP:          'db:deleteGroup',
+
+  DB_GET_GROUP_MEMBERS:        'db:getGroupMembers',
+  DB_ADD_MEMBER_TO_GROUP:      'db:addMemberToGroup',
+  DB_REMOVE_MEMBER_FROM_GROUP: 'db:removeMemberFromGroup',
+  DB_SET_CONTACT_SERVICE:      'db:setContactService',
+
+  DIALOG_OPEN_FILE:       'dialog:openFile',
+  DIALOG_OPEN_ATTACHMENT: 'dialog:openAttachment',
+
+  SEND_TO_GROUP:         'send:toGroup',
+  SEND_PROGRESS:          'send:progress',
+  DB_LOG_SEND_ATTEMPT:   'db:logSendAttempt',
+  DB_GET_SEND_HISTORY:   'db:getSendHistory',
+  DB_CLEAR_SEND_HISTORY: 'db:clearSendHistory',
+  DB_GET_SEND_RECIPIENTS: 'db:getSendRecipients',
+
+  SCHEDULING_CREATE_SCHEDULED_SEND: 'scheduling:createScheduledSend',
+  SCHEDULING_CANCEL_SCHEDULED_SEND: 'scheduling:cancelScheduledSend',
+  SCHEDULING_UPDATE_SCHEDULED_SEND: 'scheduling:updateScheduledSend',
+  SCHEDULING_SEND_TEXT_ONLY:        'scheduling:sendTextOnly',
+  DB_GET_SCHEDULED_SENDS:           'db:getScheduledSends',
+
+  PERMISSIONS_CHECK_APPLESCRIPT:      'permissions:checkAppleScript',
+  SYSTEM_CHECK_FDA:                   'system:checkFda',
+  SYSTEM_OPEN_FDA_SETTINGS:           'system:openFdaSettings',
+  SYSTEM_SET_MAC_NOTIFS:              'system:setMacNotifs',
+  SYSTEM_SEND_TEST_NOTIF:             'system:sendTestNotif',
+  SYSTEM_OPEN_CONTACTS_SETTINGS:      'system:openContactsSettings',
+  SYSTEM_OPEN_NOTIFICATIONS_SETTINGS: 'system:openNotificationsSettings',
+  SYSTEM_OPEN_AUTOMATION_SETTINGS:    'system:openAutomationSettings',
+
+  DB_EXTERNAL_CHANGE: 'db:external-change',
+  BUFFER_COMPLETE:    'buffer:complete',
+  ATTACHMENT_ERRORS:  'attachment:errors',
+
+  TEMPLATE_GET_ALL:   'template:getAll',
+  TEMPLATE_GET_BY_ID: 'template:getById',
+  TEMPLATE_CREATE:    'template:create',
+  TEMPLATE_UPDATE:    'template:update',
+  TEMPLATE_DELETE:    'template:delete',
+  TEMPLATE_SEND:      'template:send',
+}
+
 contextBridge.exposeInMainWorld('api', {
   // ── Contacts ──────────────────────────────────────────────
   diagnoseContacts: () =>
-    ipcRenderer.invoke('contacts:diagnose'),
+    ipcRenderer.invoke(CH.CONTACTS_DIAGNOSE),
 
   syncContactsFromMacOS: () =>
-    ipcRenderer.invoke('contacts:syncFromMacOS'),
+    ipcRenderer.invoke(CH.CONTACTS_SYNC_FROM_MACOS),
   getMeContact: () =>
-    ipcRenderer.invoke('contacts:getMe'),
+    ipcRenderer.invoke(CH.CONTACTS_GET_ME),
 
   importCSV: (filePath) =>
-    ipcRenderer.invoke('contacts:importCSV', filePath),
+    ipcRenderer.invoke(CH.CONTACTS_IMPORT_CSV, filePath),
 
   // ── Database ──────────────────────────────────────────────
   getContacts: () =>
-    ipcRenderer.invoke('db:getContacts'),
+    ipcRenderer.invoke(CH.DB_GET_CONTACTS),
   getContactsByIds: (ids) =>
-    ipcRenderer.invoke('db:getContactsByIds', ids),
+    ipcRenderer.invoke(CH.DB_GET_CONTACTS_BY_IDS, ids),
 
   addContact: (name, phone, email, source) =>
-    ipcRenderer.invoke('db:addContact', name, phone, email, source),
+    ipcRenderer.invoke(CH.DB_ADD_CONTACT, name, phone, email, source),
 
   deleteContact: (id) =>
-    ipcRenderer.invoke('db:deleteContact', id),
+    ipcRenderer.invoke(CH.DB_DELETE_CONTACT, id),
 
   // ── File dialogs ─────────────────────────────────────────
   openFileDialog: (options) =>
-    ipcRenderer.invoke('dialog:openFile', options),
+    ipcRenderer.invoke(CH.DIALOG_OPEN_FILE, options),
 
   // ── Groups ────────────────────────────────────────────────
   createGroup: (name) =>
-    ipcRenderer.invoke('db:createGroup', name),
+    ipcRenderer.invoke(CH.DB_CREATE_GROUP, name),
 
   getGroups: () =>
-    ipcRenderer.invoke('db:getGroups'),
+    ipcRenderer.invoke(CH.DB_GET_GROUPS),
 
   getGroupById: (id) =>
-    ipcRenderer.invoke('db:getGroupById', id),
+    ipcRenderer.invoke(CH.DB_GET_GROUP_BY_ID, id),
 
   updateGroupName: (id, newName) =>
-    ipcRenderer.invoke('db:updateGroupName', id, newName),
+    ipcRenderer.invoke(CH.DB_UPDATE_GROUP_NAME, id, newName),
 
   deleteGroup: (id) =>
-    ipcRenderer.invoke('db:deleteGroup', id),
+    ipcRenderer.invoke(CH.DB_DELETE_GROUP, id),
 
   // ── Group Members ─────────────────────────────────────────
   getGroupMembers: (groupId) =>
-    ipcRenderer.invoke('db:getGroupMembers', groupId),
+    ipcRenderer.invoke(CH.DB_GET_GROUP_MEMBERS, groupId),
 
   addMemberToGroup: (groupId, contactId) =>
-    ipcRenderer.invoke('db:addMemberToGroup', groupId, contactId),
+    ipcRenderer.invoke(CH.DB_ADD_MEMBER_TO_GROUP, groupId, contactId),
 
   removeMemberFromGroup: (groupId, contactId) =>
-    ipcRenderer.invoke('db:removeMemberFromGroup', groupId, contactId),
+    ipcRenderer.invoke(CH.DB_REMOVE_MEMBER_FROM_GROUP, groupId, contactId),
 
   setContactService: (contactId, service) =>
-    ipcRenderer.invoke('db:setContactService', contactId, service),
+    ipcRenderer.invoke(CH.DB_SET_CONTACT_SERVICE, contactId, service),
 
   checkCapability: (members) =>
-    ipcRenderer.invoke('contacts:checkCapability', members),
+    ipcRenderer.invoke(CH.CONTACTS_CHECK_CAPABILITY, members),
 
   // ── Send ──────────────────────────────────────────────────
   sendToGroup: (groupId, templateText, memberIds, attachmentPath, delaySeconds = 0) =>
-    ipcRenderer.invoke('send:toGroup', groupId, templateText, memberIds, attachmentPath, delaySeconds),
+    ipcRenderer.invoke(CH.SEND_TO_GROUP, groupId, templateText, memberIds, attachmentPath, delaySeconds),
 
   onSendProgress: (callback) =>
-    ipcRenderer.on('send:progress', (_event, data) => callback(data)),
+    ipcRenderer.on(CH.SEND_PROGRESS, (_event, data) => callback(data)),
 
   offSendProgress: () => {
-    ipcRenderer.removeAllListeners('send:progress')
+    ipcRenderer.removeAllListeners(CH.SEND_PROGRESS)
   },
 
   logSendAttempt: (groupId, templateText, status, errorLog) =>
-    ipcRenderer.invoke('db:logSendAttempt', groupId, templateText, status, errorLog),
+    ipcRenderer.invoke(CH.DB_LOG_SEND_ATTEMPT, groupId, templateText, status, errorLog),
 
   getSendHistory: (groupId, limit) =>
-    ipcRenderer.invoke('db:getSendHistory', groupId, limit),
+    ipcRenderer.invoke(CH.DB_GET_SEND_HISTORY, groupId, limit),
   clearSendHistory: () =>
-    ipcRenderer.invoke('db:clearSendHistory'),
+    ipcRenderer.invoke(CH.DB_CLEAR_SEND_HISTORY),
   getSendRecipients: (sendHistoryId) =>
-    ipcRenderer.invoke('db:getSendRecipients', sendHistoryId),
+    ipcRenderer.invoke(CH.DB_GET_SEND_RECIPIENTS, sendHistoryId),
 
   // ── Scheduling ────────────────────────────────────────────
   openAttachmentDialog: (maxFiles) =>
-    ipcRenderer.invoke('dialog:openAttachment', maxFiles),
+    ipcRenderer.invoke(CH.DIALOG_OPEN_ATTACHMENT, maxFiles),
 
   createScheduledSend: (groupId, templateText, scheduleType, scheduleData, memberIds, attachmentPath, delaySeconds = 0) =>
-    ipcRenderer.invoke('scheduling:createScheduledSend', groupId, templateText, scheduleType, scheduleData, memberIds, attachmentPath, delaySeconds),
+    ipcRenderer.invoke(CH.SCHEDULING_CREATE_SCHEDULED_SEND, groupId, templateText, scheduleType, scheduleData, memberIds, attachmentPath, delaySeconds),
 
   cancelScheduledSend: (id, plistId) =>
-    ipcRenderer.invoke('scheduling:cancelScheduledSend', id, plistId),
+    ipcRenderer.invoke(CH.SCHEDULING_CANCEL_SCHEDULED_SEND, id, plistId),
 
   updateScheduledSend: (id, plistId, templateText, scheduleType, scheduleData, memberIds, attachmentPath) =>
-    ipcRenderer.invoke('scheduling:updateScheduledSend', id, plistId, templateText, scheduleType, scheduleData, memberIds, attachmentPath),
+    ipcRenderer.invoke(CH.SCHEDULING_UPDATE_SCHEDULED_SEND, id, plistId, templateText, scheduleType, scheduleData, memberIds, attachmentPath),
 
   getScheduledSends: (groupId) =>
-    ipcRenderer.invoke('db:getScheduledSends', groupId),
+    ipcRenderer.invoke(CH.DB_GET_SCHEDULED_SENDS, groupId),
+
+  checkAppleScript: () =>
+    ipcRenderer.invoke(CH.PERMISSIONS_CHECK_APPLESCRIPT),
 
   checkFda: () =>
-    ipcRenderer.invoke('system:checkFda'),
+    ipcRenderer.invoke(CH.SYSTEM_CHECK_FDA),
 
   openFdaSettings: () =>
-    ipcRenderer.invoke('system:openFdaSettings'),
+    ipcRenderer.invoke(CH.SYSTEM_OPEN_FDA_SETTINGS),
 
   setMacNotifs: (enabled) =>
-    ipcRenderer.send('system:setMacNotifs', enabled),
+    ipcRenderer.send(CH.SYSTEM_SET_MAC_NOTIFS, enabled),
+
+  sendTestNotification: () =>
+    ipcRenderer.invoke(CH.SYSTEM_SEND_TEST_NOTIF),
+
+  openContactsSettings: () =>
+    ipcRenderer.invoke(CH.SYSTEM_OPEN_CONTACTS_SETTINGS),
+
+  openNotificationsSettings: () =>
+    ipcRenderer.invoke(CH.SYSTEM_OPEN_NOTIFICATIONS_SETTINGS),
+
+  openAutomationSettings: () =>
+    ipcRenderer.invoke(CH.SYSTEM_OPEN_AUTOMATION_SETTINGS),
 
   onDbExternalChange: (cb) =>
-    ipcRenderer.on('db:external-change', cb),
+    ipcRenderer.on(CH.DB_EXTERNAL_CHANGE, cb),
 
   onBufferComplete: (cb) =>
-    ipcRenderer.on('buffer:complete', (_e, data) => cb(data)),
+    ipcRenderer.on(CH.BUFFER_COMPLETE, (_e, data) => cb(data)),
   offBufferComplete: () =>
-    ipcRenderer.removeAllListeners('buffer:complete'),
+    ipcRenderer.removeAllListeners(CH.BUFFER_COMPLETE),
 
   sendTextOnly: (scheduledSendId) =>
-    ipcRenderer.invoke('scheduling:sendTextOnly', scheduledSendId),
+    ipcRenderer.invoke(CH.SCHEDULING_SEND_TEXT_ONLY, scheduledSendId),
 
   onAttachmentErrors: (cb) =>
-    ipcRenderer.on('attachment:errors', (_e, errors) => cb(errors)),
+    ipcRenderer.on(CH.ATTACHMENT_ERRORS, (_e, errors) => cb(errors)),
 
   // ── Templates ─────────────────────────────────────────────
   getTemplates: () =>
-    ipcRenderer.invoke('template:getAll'),
+    ipcRenderer.invoke(CH.TEMPLATE_GET_ALL),
   getTemplateById: (id) =>
-    ipcRenderer.invoke('template:getById', id),
+    ipcRenderer.invoke(CH.TEMPLATE_GET_BY_ID, id),
   createTemplate: (name, text, paths) =>
-    ipcRenderer.invoke('template:create', name, text, paths),
+    ipcRenderer.invoke(CH.TEMPLATE_CREATE, name, text, paths),
   updateTemplate: (id, name, text, paths) =>
-    ipcRenderer.invoke('template:update', id, name, text, paths),
+    ipcRenderer.invoke(CH.TEMPLATE_UPDATE, id, name, text, paths),
   deleteTemplate: (id) =>
-    ipcRenderer.invoke('template:delete', id),
+    ipcRenderer.invoke(CH.TEMPLATE_DELETE, id),
   templateSend: (tmplId, mode, ids, delaySeconds = 0) =>
-    ipcRenderer.invoke('template:send', tmplId, mode, ids, delaySeconds),
+    ipcRenderer.invoke(CH.TEMPLATE_SEND, tmplId, mode, ids, delaySeconds),
 })

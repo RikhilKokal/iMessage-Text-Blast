@@ -34,7 +34,7 @@
               All
             </label>
             <button
-              v-if="members.length > 0"
+              v-if="members.length > 0 && props.hasFda"
               class="btn-secondary small"
               :disabled="checkingCapability"
               @click="checkCapability"
@@ -51,7 +51,7 @@
             :class="{ 'member-deselected': !selectedMemberIds.has(member.id) }"
           >
             <span
-              class="member-checkbox"
+              class="round-check member-checkbox"
               :class="{ checked: selectedMemberIds.has(member.id) }"
               @click.stop="toggleMember(member.id)"
             ></span>
@@ -150,7 +150,7 @@
 
     <DeleteConfirmDialog
       v-if="showDeleteDialog"
-      :groupName="group.name"
+      :itemName="group.name"
       @confirm="confirmDelete"
       @close="showDeleteDialog = false"
     />
@@ -165,27 +165,13 @@
     />
 
     <!-- Unknown recipients warning -->
-    <div v-if="unknownWarning" class="modal-overlay" @click.self="unknownWarning = null">
-      <div class="unknown-warning-box">
-        <h3>Messaging app unknown for some recipients</h3>
-        <p>
-          No message history found for <strong>{{ unknownWarning.names.join(', ') }}</strong>, so we can't tell if they use iMessage or SMS.
-        </p>
-        <p>
-          If you know, you can set it using the "Unknown" label next to their name. If not, don't worry.
-          <template v-if="props.hasFda">The message will still deliver, though you may see a brief error notification while it sends.</template>
-          <template v-else>The message may not deliver if the recipient uses SMS rather than iMessage.</template>
-        </p>
-        <div class="unknown-warning-actions">
-          <button @click="unknownWarning = null">Go Back</button>
-          <button class="btn-primary" @click="unknownWarning.proceed()">Send Anyway</button>
-        </div>
-        <div class="unknown-warning-never" @click="unknownWarningNeverCheck = !unknownWarningNeverCheck">
-          <span class="round-check" :class="{ checked: unknownWarningNeverCheck }"></span>
-          <span>Don't show again</span>
-        </div>
-      </div>
-    </div>
+    <UnknownRecipientWarningDialog
+      :warning="unknownWarning"
+      :hasFda="props.hasFda"
+      v-model:neverCheck="unknownWarningNeverCheck"
+      @cancel="unknownWarning = null"
+      @confirm="unknownWarning.proceed()"
+    />
 
   </div>
 </template>
@@ -199,6 +185,9 @@ import MessagePreview      from './MessagePreview.vue'
 import BufferSecondsInput  from './BufferSecondsInput.vue'
 import ScheduleModal       from './ScheduleModal.vue'
 import TokenEditor         from './TokenEditor.vue'
+import UnknownRecipientWarningDialog from './UnknownRecipientWarningDialog.vue'
+import { useUnknownRecipientWarning, getUnconfirmedNames } from '../composables/useUnknownRecipientWarning'
+import { VARIABLES, TOKEN_LABELS } from '../constants/variables'
 
 // ── Props & emits ──────────────────────────────────────────────────────────
 const props = defineProps({
@@ -207,19 +196,6 @@ const props = defineProps({
   hasFda:  { type: Boolean, default: true },
 })
 const emit = defineEmits(['update-name', 'delete-group', 'add-member', 'remove-member', 'set-service'])
-
-// ── Variables supported in Tier 1 ─────────────────────────────────────────
-const VARIABLES = [
-  { key: 'firstName', label: 'First Name' },
-  { key: 'lastName',  label: 'Last Name'  },
-  { key: 'fullName',  label: 'Full Name'  },
-  { key: 'email',     label: 'Email'      },
-  { key: 'phone',     label: 'Phone'      },
-  { key: 'company',   label: 'Company'    },
-  { key: 'nickname',  label: 'Nickname'   },
-]
-
-const TOKEN_LABELS = Object.fromEntries(VARIABLES.map(v => [v.key, v.label]))
 
 // ── State ──────────────────────────────────────────────────────────────────
 const editingName     = ref(false)
@@ -380,25 +356,11 @@ const showToast = inject('addToast')
 
 
 // ── Unknown warning ────────────────────────────────────────────────────────
-const unknownWarning = ref(null)
-const neverShowUnknownWarning = ref(localStorage.getItem('neverShowUnknownWarning') === 'true')
-const unknownWarningNeverCheck = ref(false)
+const { unknownWarning, unknownWarningNeverCheck, checkUnknownThenProceed: warnIfUnknown } = useUnknownRecipientWarning()
 
 function checkUnknownThenProceed(proceedFn) {
-  const unknowns = selectedMembers.value.filter(m => !m.service_confirmed)
-  if (!unknowns.length || neverShowUnknownWarning.value) { proceedFn(); return }
-  unknownWarningNeverCheck.value = false
-  unknownWarning.value = {
-    names: unknowns.map(m => m.name),
-    proceed: () => {
-      if (unknownWarningNeverCheck.value) {
-        neverShowUnknownWarning.value = true
-        localStorage.setItem('neverShowUnknownWarning', 'true')
-      }
-      unknownWarning.value = null
-      proceedFn()
-    }
-  }
+  const names = getUnconfirmedNames(selectedMembers.value)
+  warnIfUnknown(names, proceedFn)
 }
 
 // ── Send Now ───────────────────────────────────────────────────────────────
@@ -642,33 +604,8 @@ async function handleSchedule(info) {
   transform: rotate(45deg);
 }
 
-.member-checkbox {
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 1.5px solid var(--border);
-  background: var(--surface);
-  cursor: pointer;
-  position: relative;
-  transition: background 0.15s, border-color 0.15s;
-}
-.member-checkbox.checked {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-.member-checkbox.checked::after {
-  content: '';
-  position: absolute;
-  left: 4px;
-  top: 2px;
-  width: 4px;
-  height: 7px;
-  border: 1.5px solid #fff;
-  border-top: none;
-  border-left: none;
-  transform: rotate(45deg);
-}
+/* .member-row doesn't set cursor, so this stays local on top of the shared .round-check */
+.member-checkbox { cursor: pointer; }
 
 .member-deselected {
   opacity: 0.45;
@@ -705,50 +642,5 @@ async function handleSchedule(info) {
 
 .send-actions { display: flex; gap: 8px; }
 .send-actions button { padding: 7px 18px; }
-
-
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-  backdrop-filter: blur(2px);
-}
-
-.unknown-warning-box {
-  background: var(--surface);
-  border-radius: 12px;
-  padding: 24px;
-  width: min(420px, calc(100vw - 48px));
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-}
-.unknown-warning-box h3 { font-size: 16px; font-weight: 700; margin: 0; }
-.unknown-warning-box p  { font-size: 13px; line-height: 1.55; margin: 0; color: var(--text); }
-
-.unknown-warning-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 4px;
-}
-.unknown-warning-actions button { padding: 8px 18px; }
-
-.unknown-warning-never {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--text-2);
-  cursor: pointer;
-  user-select: none;
-}
 
 </style>

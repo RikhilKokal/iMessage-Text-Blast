@@ -2,12 +2,13 @@ const Database  = require('better-sqlite3')
 const os        = require('os')
 const path      = require('path')
 const fs        = require('fs')
-const { execSync, spawn } = require('child_process')
+const { spawn } = require('child_process')
 
 const core = require('./sendCore')
+const { detectNodePath } = require('./nodePath')
 
 const CHAT_DB_PATH     = path.join(os.homedir(), 'Library', 'Messages', 'chat.db')
-const HELPER_SCRIPT    = path.join(__dirname, '../../buffer-send-helper.js')
+const HELPER_SCRIPT    = path.join(__dirname, '../../buffer-send-helper.js').replace('/app.asar/', '/app.asar.unpacked/')
 
 function chatDbQuery(sql) {
   const db = new Database(CHAT_DB_PATH, { readonly: true, fileMustExist: true })
@@ -16,17 +17,6 @@ function chatDbQuery(sql) {
   } finally {
     db.close()
   }
-}
-
-function detectNodePath() {
-  try {
-    const p = execSync('which node', { shell: '/bin/bash', env: process.env }).toString().trim()
-    if (p) return p
-  } catch (_) {}
-  for (const candidate of ['/opt/homebrew/bin/node', '/usr/local/bin/node', '/usr/bin/node']) {
-    if (fs.existsSync(candidate)) return candidate
-  }
-  return 'node'
 }
 
 function runBufferHelperDetached(members, templateText, delaySeconds, attachmentPath) {

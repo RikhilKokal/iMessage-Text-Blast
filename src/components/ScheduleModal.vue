@@ -140,6 +140,8 @@ function submit() {
 }
 </script>
 
+<style src="../styles/message-panel.css"></style>
+
 <style scoped>
 .overlay {
   position: fixed;
@@ -155,7 +157,7 @@ function submit() {
 .modal {
   background: var(--surface);
   border-radius: 12px;
-  width: min(420px, calc(100vw - 48px));
+  width: min(460px, calc(100vw - 48px));
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   display: flex;
   flex-direction: column;
@@ -260,46 +262,6 @@ function submit() {
   cursor: pointer;
   user-select: none;
 }
-.round-check {
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 1.5px solid var(--border);
-  background: var(--surface);
-  position: relative;
-  transition: background 0.15s, border-color 0.15s;
-}
-.round-check.checked {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-.round-check.checked::after {
-  content: '';
-  position: absolute;
-  left: 4px;
-  top: 2px;
-  width: 4px;
-  height: 7px;
-  border: 1.5px solid #fff;
-  border-top: none;
-  border-left: none;
-  transform: rotate(45deg);
-}
-.buffer-input {
-  width: 52px;
-  padding: 4px 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-family: var(--font);
-  font-size: 13px;
-  background: var(--surface);
-  color: var(--text);
-  text-align: center;
-}
-.buffer-input:focus { outline: none; border-color: var(--accent); }
-.buffer-input:disabled { opacity: 0.4; }
-
 .actions {
   display: flex;
   gap: 8px;

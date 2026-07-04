@@ -13,13 +13,23 @@ const csvService = require('./src/services/csvService')
 const iMessageService = require('./src/services/iMessageService')
 const schedulingService = require('./src/services/schedulingService')
 const { BUFFER_DONE_PATH } = require('./src/services/sendCore')
+const CH = require('./src/shared/ipcChannels')
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
 let mainWindow = null
-let macNotifsEnabled = true
+let macNotifsEnabled = false
 
-ipcMain.on('system:setMacNotifs', (_e, enabled) => { macNotifsEnabled = enabled })
+ipcMain.on(CH.SYSTEM_SET_MAC_NOTIFS, (_e, enabled) => { macNotifsEnabled = enabled })
+
+ipcMain.handle(CH.SYSTEM_SEND_TEST_NOTIF, () => {
+  if (Notification.isSupported()) {
+    new Notification({
+      title: 'iMessage Text Blast',
+      body: "Notifications are on. You'll be alerted when sends complete.",
+    }).show()
+  }
+})
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -60,7 +70,7 @@ function createWindow() {
 // ── IPC Handlers ────────────────────────────────────────────────────────────
 
 // Contacts — diagnostic: check swift accessibility from Electron's process
-ipcMain.handle('contacts:diagnose', async () => {
+ipcMain.handle(CH.CONTACTS_DIAGNOSE, async () => {
   const { execFile } = require('child_process')
   const { promisify } = require('util')
   const execFileAsync = promisify(execFile)
@@ -75,8 +85,9 @@ ipcMain.handle('contacts:diagnose', async () => {
   return results
 })
 
-ipcMain.handle('contacts:syncFromMacOS', async () => {
+ipcMain.handle(CH.CONTACTS_SYNC_FROM_MACOS, async () => {
   try {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.focus()
     return await contactsService.syncFromMacOS()
   } catch (err) {
     console.error('[IPC] contacts:syncFromMacOS error:', err)
@@ -84,11 +95,11 @@ ipcMain.handle('contacts:syncFromMacOS', async () => {
   }
 })
 
-ipcMain.handle('contacts:getMe', async () => {
+ipcMain.handle(CH.CONTACTS_GET_ME, async () => {
   try { return await contactsService.getMeContact() } catch { return null }
 })
 
-ipcMain.handle('contacts:importCSV', async (_event, filePath) => {
+ipcMain.handle(CH.CONTACTS_IMPORT_CSV, async (_event, filePath) => {
   try {
     return csvService.importFromCSV(filePath)
   } catch (err) {
@@ -98,38 +109,38 @@ ipcMain.handle('contacts:importCSV', async (_event, filePath) => {
 })
 
 // Database — contacts CRUD
-ipcMain.handle('db:getContacts', () => db.getContacts())
-ipcMain.handle('db:getContactsByIds', (_event, ids) => db.getContactsByIds(ids))
+ipcMain.handle(CH.DB_GET_CONTACTS, () => db.getContacts())
+ipcMain.handle(CH.DB_GET_CONTACTS_BY_IDS, (_event, ids) => db.getContactsByIds(ids))
 
-ipcMain.handle('db:addContact', (_event, name, phone, email, source) => {
+ipcMain.handle(CH.DB_ADD_CONTACT, (_event, name, phone, email, source) => {
   return db.addContact(name, phone, email, source)
 })
 
-ipcMain.handle('db:deleteContact', (_event, id) => {
+ipcMain.handle(CH.DB_DELETE_CONTACT, (_event, id) => {
   db.deleteContact(id)
   return true
 })
 
 // ── Groups ────────────────────────────────────────────────────────────────────
 
-ipcMain.handle('db:createGroup', (_event, name) => db.createGroup(name))
-ipcMain.handle('db:getGroups', () => db.getGroups())
-ipcMain.handle('db:getGroupById', (_event, id) => db.getGroupById(id))
-ipcMain.handle('db:updateGroupName', (_event, id, newName) => db.updateGroupName(id, newName))
-ipcMain.handle('db:deleteGroup', (_event, id) => db.deleteGroup(id))
+ipcMain.handle(CH.DB_CREATE_GROUP, (_event, name) => db.createGroup(name))
+ipcMain.handle(CH.DB_GET_GROUPS, () => db.getGroups())
+ipcMain.handle(CH.DB_GET_GROUP_BY_ID, (_event, id) => db.getGroupById(id))
+ipcMain.handle(CH.DB_UPDATE_GROUP_NAME, (_event, id, newName) => db.updateGroupName(id, newName))
+ipcMain.handle(CH.DB_DELETE_GROUP, (_event, id) => db.deleteGroup(id))
 
 // ── Group Members ─────────────────────────────────────────────────────────────
 
-ipcMain.handle('db:getGroupMembers', (_event, groupId) => db.getGroupMembers(groupId))
-ipcMain.handle('db:addMemberToGroup', (_event, groupId, contactId) => {
+ipcMain.handle(CH.DB_GET_GROUP_MEMBERS, (_event, groupId) => db.getGroupMembers(groupId))
+ipcMain.handle(CH.DB_ADD_MEMBER_TO_GROUP, (_event, groupId, contactId) => {
   db.addMemberToGroup(groupId, contactId)
   // Check capability for this contact immediately so the chip is ready when the member list reloads
   const contact = db.getContacts().find(c => c.id === contactId)
   if (contact) checkCapabilitySync([contact])
   return true
 })
-ipcMain.handle('db:removeMemberFromGroup', (_event, groupId, contactId) => db.removeMemberFromGroup(groupId, contactId))
-ipcMain.handle('db:setContactService', (_event, contactId, service) => { db.setContactService(contactId, service); return true })
+ipcMain.handle(CH.DB_REMOVE_MEMBER_FROM_GROUP, (_event, groupId, contactId) => db.removeMemberFromGroup(groupId, contactId))
+ipcMain.handle(CH.DB_SET_CONTACT_SERVICE, (_event, contactId, service) => { db.setContactService(contactId, service); return true })
 
 // ── iMessage capability check ─────────────────────────────────────────────────
 
@@ -195,7 +206,7 @@ function checkCapabilitySync(members) {
   return results
 }
 
-ipcMain.handle('contacts:checkCapability', async (_event, members) => checkCapabilitySync(members))
+ipcMain.handle(CH.CONTACTS_CHECK_CAPABILITY, async (_event, members) => checkCapabilitySync(members))
 
 // ── Send ──────────────────────────────────────────────────────────────────────
 
@@ -204,7 +215,7 @@ function dedupByPhone(arr) {
   return arr.filter(m => seen.has(m.phone) ? false : (seen.add(m.phone), true))
 }
 
-ipcMain.handle('send:toGroup', async (event, groupId, templateText, memberIds, attachmentPath, delaySeconds = 0) => {
+ipcMain.handle(CH.SEND_TO_GROUP, async (event, groupId, templateText, memberIds, attachmentPath, delaySeconds = 0) => {
   // Fetch members fresh from DB, optionally filtered to a subset
   const allMembers = dedupByPhone(db.getGroupMembers(groupId))
   let members = allMembers
@@ -223,7 +234,7 @@ ipcMain.handle('send:toGroup', async (event, groupId, templateText, memberIds, a
     templateText,
     (progress) => {
       if (!event.sender.isDestroyed()) {
-        event.sender.send('send:progress', progress)
+        event.sender.send(CH.SEND_PROGRESS, progress)
       }
     },
     attachmentPath || null,
@@ -263,16 +274,16 @@ ipcMain.handle('send:toGroup', async (event, groupId, templateText, memberIds, a
 
 // ── Templates ─────────────────────────────────────────────────────────────────
 
-ipcMain.handle('template:getAll', () => db.getTemplates())
-ipcMain.handle('template:getById', (_e, id) => db.getTemplateById(id))
+ipcMain.handle(CH.TEMPLATE_GET_ALL, () => db.getTemplates())
+ipcMain.handle(CH.TEMPLATE_GET_BY_ID, (_e, id) => db.getTemplateById(id))
 
-ipcMain.handle('template:create', (_e, name, templateText, attachmentPaths) => {
+ipcMain.handle(CH.TEMPLATE_CREATE, (_e, name, templateText, attachmentPaths) => {
   const stored = copyAttachmentsToStorage(attachmentPaths)
   const json = stored.length ? JSON.stringify(stored) : null
   return db.createTemplate(name, templateText, json)
 })
 
-ipcMain.handle('template:update', (_e, id, name, templateText, attachmentPaths) => {
+ipcMain.handle(CH.TEMPLATE_UPDATE, (_e, id, name, templateText, attachmentPaths) => {
   const existing = db.getTemplateById(id)
   if (attachmentPaths !== undefined) {
     deleteStoredAttachments(existing?.attachment_path)
@@ -284,13 +295,13 @@ ipcMain.handle('template:update', (_e, id, name, templateText, attachmentPaths) 
   }
 })
 
-ipcMain.handle('template:delete', (_e, id) => {
+ipcMain.handle(CH.TEMPLATE_DELETE, (_e, id) => {
   const tmpl = db.getTemplateById(id)
   deleteStoredAttachments(tmpl?.attachment_path)
   db.deleteTemplate(id)
 })
 
-ipcMain.handle('template:send', async (event, templateId, mode, ids, delaySeconds = 0) => {
+ipcMain.handle(CH.TEMPLATE_SEND, async (event, templateId, mode, ids, delaySeconds = 0) => {
   const tmpl = db.getTemplateById(templateId)
   if (!tmpl) throw new Error('Template not found')
   const attachments = tmpl.attachment_path ? JSON.parse(tmpl.attachment_path) : null
@@ -304,7 +315,7 @@ ipcMain.handle('template:send', async (event, templateId, mode, ids, delaySecond
       db.logSendRecipients(historyId, allMembers, allMembers)
       const result = await iMessageService.sendToGroup(
         allMembers, tmpl.template_text,
-        (p) => { if (!event.sender.isDestroyed()) event.sender.send('send:progress', p) },
+        (p) => { if (!event.sender.isDestroyed()) event.sender.send(CH.SEND_PROGRESS, p) },
         attachments, delaySeconds
       )
       if (result.buffered) {
@@ -328,7 +339,7 @@ ipcMain.handle('template:send', async (event, templateId, mode, ids, delaySecond
     db.logSendRecipients(historyId, members, members)
     const result = await iMessageService.sendToGroup(
       members, tmpl.template_text,
-      (p) => { if (!event.sender.isDestroyed()) event.sender.send('send:progress', p) },
+      (p) => { if (!event.sender.isDestroyed()) event.sender.send(CH.SEND_PROGRESS, p) },
       attachments, delaySeconds
     )
     if (result.buffered) {
@@ -345,28 +356,52 @@ ipcMain.handle('template:send', async (event, templateId, mode, ids, delaySecond
   }
 })
 
-ipcMain.handle('db:logSendAttempt', (_event, groupId, templateText, status, errorLog) =>
+ipcMain.handle(CH.DB_LOG_SEND_ATTEMPT, (_event, groupId, templateText, status, errorLog) =>
   db.logSendAttempt(groupId, templateText, status, errorLog)
 )
 
-ipcMain.handle('db:getSendHistory', (_event, groupId, limit) =>
+ipcMain.handle(CH.DB_GET_SEND_HISTORY, (_event, groupId, limit) =>
   db.getSendHistory(groupId, limit)
 )
 
-ipcMain.handle('db:clearSendHistory', () =>
+ipcMain.handle(CH.DB_CLEAR_SEND_HISTORY, () =>
   db.clearSendHistory()
 )
 
-ipcMain.handle('db:getSendRecipients', (_event, sendHistoryId) =>
+ipcMain.handle(CH.DB_GET_SEND_RECIPIENTS, (_event, sendHistoryId) =>
   db.getSendRecipients(sendHistoryId)
 )
 
-ipcMain.handle('system:checkFda', () => {
+ipcMain.handle(CH.PERMISSIONS_CHECK_APPLESCRIPT, async () => {
+  try {
+    await execFileAsync('osascript', ['-e', 'tell application "Messages" to get name'], { timeout: 5000 })
+    return { granted: true }
+  } catch {
+    return { granted: false }
+  }
+})
+
+ipcMain.handle(CH.SYSTEM_OPEN_NOTIFICATIONS_SETTINGS, () => {
+  const { shell } = require('electron')
+  shell.openExternal('x-apple.systempreferences:com.apple.preference.notifications')
+})
+
+ipcMain.handle(CH.SYSTEM_OPEN_CONTACTS_SETTINGS, () => {
+  const { shell } = require('electron')
+  shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts')
+})
+
+ipcMain.handle(CH.SYSTEM_OPEN_AUTOMATION_SETTINGS, () => {
+  const { shell } = require('electron')
+  shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Automation')
+})
+
+ipcMain.handle(CH.SYSTEM_CHECK_FDA, () => {
   const chatDb = require('./src/services/chatDbService')
   return chatDb.checkFdaAccess()
 })
 
-ipcMain.handle('system:openFdaSettings', () => {
+ipcMain.handle(CH.SYSTEM_OPEN_FDA_SETTINGS, () => {
   const { shell } = require('electron')
   shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles')
 })
@@ -374,7 +409,7 @@ ipcMain.handle('system:openFdaSettings', () => {
 
 // ── Scheduling ────────────────────────────────────────────────────────────────
 
-const HELPER_SCRIPT_PATH   = path.join(__dirname, 'scheduled-send-helper.js')
+const HELPER_SCRIPT_PATH   = path.join(__dirname, 'scheduled-send-helper.js').replace('/app.asar/', '/app.asar.unpacked/')
 const ATTACHMENTS_DIR      = path.join(os.homedir(), 'Library', 'Application Support', 'iMessage Bulk Scheduler', 'attachments')
 
 function ensureAttachmentsDir() {
@@ -405,7 +440,7 @@ function deleteStoredAttachments(raw) {
   }
 }
 
-ipcMain.handle('scheduling:createScheduledSend', async (_event, groupId, templateText, scheduleType, scheduleData, memberIds, attachmentPaths, delaySeconds = 0) => {
+ipcMain.handle(CH.SCHEDULING_CREATE_SCHEDULED_SEND, async (_event, groupId, templateText, scheduleType, scheduleData, memberIds, attachmentPaths, delaySeconds = 0) => {
   const plistId   = schedulingService.generatePlistId(groupId)
   const nextRun   = schedulingService.calculateNextRun(scheduleType, scheduleData)
   const stored    = copyAttachmentsToStorage(attachmentPaths || [])
@@ -416,7 +451,7 @@ ipcMain.handle('scheduling:createScheduledSend', async (_event, groupId, templat
   return { plistId, nextRun: nextRun.toISOString() }
 })
 
-ipcMain.handle('scheduling:cancelScheduledSend', async (_event, id, plistId) => {
+ipcMain.handle(CH.SCHEDULING_CANCEL_SCHEDULED_SEND, async (_event, id, plistId) => {
   const row = db.getScheduledSendById(id)
   const dbPlistId = db.cancelScheduledSend(id)
   if (row?.attachment_path) deleteStoredAttachments(row.attachment_path)
@@ -425,7 +460,7 @@ ipcMain.handle('scheduling:cancelScheduledSend', async (_event, id, plistId) => 
   return true
 })
 
-ipcMain.handle('scheduling:updateScheduledSend', async (_event, id, plistId, templateText, scheduleType, scheduleData, memberIds, attachmentPaths) => {
+ipcMain.handle(CH.SCHEDULING_UPDATE_SCHEDULED_SEND, async (_event, id, plistId, templateText, scheduleType, scheduleData, memberIds, attachmentPaths) => {
   const old = db.getScheduledSendById(id)
   if (plistId) await schedulingService.cancelSchedule(plistId)
 
@@ -441,16 +476,16 @@ ipcMain.handle('scheduling:updateScheduledSend', async (_event, id, plistId, tem
   return { nextRun: nextRun.toISOString() }
 })
 
-ipcMain.handle('db:getScheduledSends', (_event, groupId) =>
+ipcMain.handle(CH.DB_GET_SCHEDULED_SENDS, (_event, groupId) =>
   db.getScheduledSends(groupId ?? null)
 )
 
-ipcMain.handle('dialog:openFile', async (_event, options) => {
+ipcMain.handle(CH.DIALOG_OPEN_FILE, async (_event, options) => {
   const result = await dialog.showOpenDialog(options || {})
   return result.canceled ? null : result.filePaths[0]
 })
 
-ipcMain.handle('dialog:openAttachment', async () => {
+ipcMain.handle(CH.DIALOG_OPEN_ATTACHMENT, async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile', 'multiSelections'],
     filters: [
@@ -473,14 +508,14 @@ function drainAttachmentErrors() {
     const errors = JSON.parse(raw)
     if (errors.length && mainWindow && !mainWindow.isDestroyed()) {
       fs.writeFileSync(ERROR_QUEUE_PATH, '[]', 'utf8')
-      mainWindow.webContents.send('attachment:errors', errors)
+      mainWindow.webContents.send(CH.ATTACHMENT_ERRORS, errors)
     }
   } catch (_) {}
 }
 
 // ── Send text only (attachment missing recovery) ─────────────────────────────
 
-ipcMain.handle('scheduling:sendTextOnly', async (_e, scheduledSendId) => {
+ipcMain.handle(CH.SCHEDULING_SEND_TEXT_ONLY, async (_e, scheduledSendId) => {
   const send = db.getScheduledSendById(scheduledSendId)
   if (!send) throw new Error('Scheduled send not found')
 
@@ -513,7 +548,7 @@ ipcMain.handle('scheduling:sendTextOnly', async (_e, scheduledSendId) => {
 
 // ── App lifecycle ────────────────────────────────────────────────────────────
 
-app.setAppUserModelId('com.imessage.text-blast')
+app.setAppUserModelId('com.imessage.bulk-scheduler')
 
 app.whenReady().then(() => {
   // Init DB synchronously before window opens so tables exist
@@ -538,7 +573,7 @@ app.whenReady().then(() => {
         if (result?.isError && result.type === 'attachmentMissing') {
           // Clear the queue file so drainAttachmentErrors doesn't re-deliver on focus
           try { fs.writeFileSync(ERROR_QUEUE_PATH, '[]', 'utf8') } catch (_) {}
-          mainWindow.webContents.send('attachment:errors', [result])
+          mainWindow.webContents.send(CH.ATTACHMENT_ERRORS, [result])
           if (macNotifsEnabled && Notification.isSupported()) {
             const group = result.groupName ?? 'scheduled message'
             new Notification({
@@ -550,7 +585,7 @@ app.whenReady().then(() => {
           return
         }
 
-        mainWindow.webContents.send('db:external-change', result)
+        mainWindow.webContents.send(CH.DB_EXTERNAL_CHANGE, result)
 
         if (result && macNotifsEnabled && !mainWindow.isFocused() && Notification.isSupported()) {
           const noun = result.succeeded === 1 ? 'person' : 'people'
@@ -574,7 +609,7 @@ app.whenReady().then(() => {
     const noun = result.succeeded === 1 ? 'message' : 'messages'
     const body = `All ${result.succeeded} ${noun} delivered.`
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('buffer:complete', { succeeded: result.succeeded, autoRouted: result.autoRouted ?? [] })
+      mainWindow.webContents.send(CH.BUFFER_COMPLETE, { succeeded: result.succeeded, autoRouted: result.autoRouted ?? [] })
     }
     if (macNotifsEnabled && Notification.isSupported()) {
       new Notification({ title: 'Buffered send complete', body }).show()

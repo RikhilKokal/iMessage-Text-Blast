@@ -36,15 +36,9 @@
         <button class="btn-secondary small full-width" @click="toggleTheme">
           {{ isDark ? '☀️ Light Mode' : '🌙 Dark Mode' }}
         </button>
-        <div class="notif-toggle-row">
-          <span>Mac Notifications</span>
-          <button
-            class="toggle-switch"
-            :class="{ on: macNotifs }"
-            @click="toggleMacNotifs"
-            :aria-label="macNotifs ? 'Disable Mac notifications' : 'Enable Mac notifications'"
-          ><span class="toggle-knob"></span></button>
-        </div>
+        <button class="btn-secondary small full-width" @click="showPermissionsSettings = true">
+          🔒 Permissions
+        </button>
         <button
           v-if="scheduledSyncPreference"
           class="btn-secondary small full-width reset-sync-pref"
@@ -56,16 +50,6 @@
         <div v-if="lastSyncTime" class="sync-time">
           Last sync: {{ lastSyncTime.toLocaleTimeString() }}
         </div>
-      </div>
-    </div>
-
-    <!-- FDA Banner -->
-    <div v-if="fdaBanner" class="fda-banner">
-      <span>⚠️ <strong>Full Disk Access needed</strong> for automatic iMessage → SMS routing.</span>
-      <div class="fda-banner-actions">
-        <button class="fda-btn-open" @click="openFdaSettings">Open Settings</button>
-        <button class="fda-btn-check" @click="recheckFda">Check Again</button>
-        <button class="fda-btn-dismiss" @click="fdaBanner = false">Dismiss</button>
       </div>
     </div>
 
@@ -140,6 +124,14 @@
       @close="clearAllToasts"
     />
 
+    <PermissionsSettingsPanel
+      v-if="showPermissionsSettings"
+      :macNotifs="macNotifs"
+      @close="showPermissionsSettings = false"
+      @fda-changed="(v) => { fdaBanner = !v }"
+      @notifs-changed="onNotifsChanged"
+    />
+
     <AttachmentErrorDialog
       v-if="pendingAttachmentError"
       :error="pendingAttachmentError"
@@ -191,22 +183,25 @@ import ScheduledSyncModal from './components/ScheduledSyncModal.vue'
 import Toast from './components/Toast.vue'
 import NotificationsPanel from './components/NotificationsPanel.vue'
 import AttachmentErrorDialog from './components/AttachmentErrorDialog.vue'
+import PermissionsSettingsPanel from './components/PermissionsSettingsPanel.vue'
+import { STORAGE_KEYS } from './constants/storage'
+
+const showPermissionsSettings = ref(false)
 
 // ── Theme ──────────────────────────────────────────────────────────────────
-const isDark = ref(localStorage.getItem('theme') === 'dark')
-const macNotifs = ref(localStorage.getItem('macNotifs') !== 'false')
-
-function toggleMacNotifs() {
-  macNotifs.value = !macNotifs.value
-  localStorage.setItem('macNotifs', String(macNotifs.value))
-  window.api.setMacNotifs(macNotifs.value)
+const isDark = ref(localStorage.getItem(STORAGE_KEYS.THEME) === 'dark')
+const macNotifs = ref(localStorage.getItem(STORAGE_KEYS.MAC_NOTIFS) === 'true')
+function onNotifsChanged(v) {
+  macNotifs.value = v
+  localStorage.setItem(STORAGE_KEYS.MAC_NOTIFS, String(v))
+  window.api.setMacNotifs(v)
 }
 function applyTheme(dark) {
   document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
 }
 function toggleTheme() {
   isDark.value = !isDark.value
-  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
+  localStorage.setItem(STORAGE_KEYS.THEME, isDark.value ? 'dark' : 'light')
   applyTheme(isDark.value)
 }
 applyTheme(isDark.value)
@@ -258,17 +253,6 @@ function clearAllToasts() {
 }
 
 const fdaBanner = ref(false)
-
-async function recheckFda() {
-  const result = await window.api.checkFda()
-  fdaBanner.value = !result.granted
-  if (result.granted) showToast('Full Disk Access granted — automatic routing enabled.')
-}
-
-function openFdaSettings() {
-  // Deep-link to the Full Disk Access pane in System Settings
-  window.api.openFdaSettings?.() // graceful if not wired
-}
 
 const selectedGroup = computed(() =>
   groups.value.find((g) => g.id === selectedGroupId.value) ?? null
@@ -392,7 +376,7 @@ async function deleteGroup() {
 }
 
 // ── Scheduled sync preference ─────────────────────────────────────────────
-const SYNC_PREF_KEY = 'scheduledSyncPreference'
+const SYNC_PREF_KEY = STORAGE_KEYS.SCHEDULED_SYNC_PREFERENCE
 const scheduledSyncPreference = ref(localStorage.getItem(SYNC_PREF_KEY) || null)
 const scheduledSyncModal = ref(null) // { contactName, contactId, action, sends, groupMembers, resolve }
 
@@ -528,7 +512,7 @@ async function syncContacts(silent = false) {
     const result = await window.api.syncContactsFromMacOS()
     lastSyncTime.value = new Date()
     if (result.denied) {
-      showToast('Contacts permission denied. Import via CSV instead.', 'error')
+      showToast('Contacts permission denied. Allow permissions in System Settings and refresh.', 'error')
     } else {
       const parts = []
       if (result.count   > 0) parts.push(`${result.count} new`)
@@ -549,18 +533,27 @@ async function syncContacts(silent = false) {
   }
 }
 
+function onKeyDown(e) {
+  if (e.key !== 'Escape') return
+  if (showPermissionsSettings.value) { showPermissionsSettings.value = false }
+  else if (showHistory.value)        { showHistory.value = false }
+  else if (showScheduled.value)      { showScheduled.value = false }
+  else if (showCreateDialog.value)   { showCreateDialog.value = false }
+  else if (showNotificationsPanel.value) { showNotificationsPanel.value = false }
+  else return
+  document.activeElement?.blur()
+}
+
 onMounted(async () => {
-  // Check Full Disk Access — needed for auto iMessage→SMS routing via chat.db
+  window.addEventListener('keydown', onKeyDown)
+
   const fda = await window.api.checkFda()
   fdaBanner.value = !fda.granted
 
-  // Sync notification preference to main process
   window.api.setMacNotifs(macNotifs.value)
 
-  // Silent background sync on launch — only toasts if new contacts are found
-  await syncContacts(true)
-  await loadGroups()
-  await loadTemplates()
+  await Promise.all([loadGroups(), loadTemplates()])
+  syncContacts(true)
 
   // When the scheduled-send-helper finishes, reload the current group,
   // refresh the scheduled sends dashboard, and show a toast.
@@ -633,26 +626,6 @@ async function onSendTextOnly(scheduledSendId) {
 </script>
 
 <style>
-/* ── FDA Banner ──────────────────────────────────────────────────────────── */
-.fda-banner {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 20px;
-  background: var(--warn-tint);
-  border-bottom: 1px solid var(--warn);
-  font-size: 13px;
-  color: var(--warn-tint-text);
-}
-.fda-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
-.fda-btn-open    { padding: 4px 12px; border-radius: 6px; border: 1px solid var(--warn); background: var(--warn-tint); color: var(--warn-tint-text); font-size: 12px; font-weight: 600; cursor: pointer; }
-.fda-btn-check   { padding: 4px 12px; border-radius: 6px; border: 1px solid var(--warn); background: transparent; color: var(--warn-tint-text); font-size: 12px; cursor: pointer; }
-.fda-btn-dismiss { padding: 4px 8px;  border-radius: 6px; border: none; background: transparent; color: var(--warn-tint-text); font-size: 12px; cursor: pointer; }
-
 /* ── Reset ───────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -724,6 +697,8 @@ input:focus { border-color: var(--accent); }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 </style>
+
+<style src="./styles/toggle-switch.css"></style>
 
 <style scoped>
 .drag-region {
@@ -919,38 +894,4 @@ input:focus { border-color: var(--accent); }
 }
 .collapsed-toast .toast-close:hover { color: var(--text); background: none; }
 
-.notif-toggle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 2px;
-  font-size: 12px;
-  color: var(--text-2);
-}
-.toggle-switch {
-  width: 36px;
-  height: 20px;
-  border-radius: 10px;
-  background: var(--border);
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  position: relative;
-  transition: background 0.2s;
-  flex-shrink: 0;
-}
-.toggle-switch.on { background: #34c759; }
-.toggle-knob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #fff;
-  transition: transform 0.2s;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
-  display: block;
-}
-.toggle-switch.on .toggle-knob { transform: translateX(16px); }
 </style>

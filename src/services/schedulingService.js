@@ -1,8 +1,10 @@
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
-const { execSync, execFile } = require('child_process')
+const { execFile } = require('child_process')
 const { promisify } = require('util')
+const { detectNodePath } = require('./nodePath')
+const { calculateNextRun } = require('./sendCore')
 
 const execFileAsync = promisify(execFile)
 
@@ -10,25 +12,6 @@ const LAUNCH_AGENT_DIR = path.join(os.homedir(), 'Library', 'LaunchAgents')
 
 // ── Node binary detection ─────────────────────────────────────────────────────
 // Detect once at module-load time so we can embed the path in plists.
-// launchd runs outside any shell profile, so we can't rely on $PATH containing
-// nvm / homebrew entries unless we look them up now from the Electron process's
-// own PATH.
-function detectNodePath() {
-  try {
-    const p = execSync('which node', { shell: '/bin/bash', env: process.env }).toString().trim()
-    if (p) return p
-  } catch (_) { /* fall through */ }
-  // Common hard-coded fallbacks
-  for (const candidate of [
-    '/opt/homebrew/bin/node',
-    '/usr/local/bin/node',
-    '/usr/bin/node',
-  ]) {
-    if (fs.existsSync(candidate)) return candidate
-  }
-  return 'node' // last resort — may not work from launchd
-}
-
 const NODE_PATH = detectNodePath()
 console.log(`[Scheduling] Using node binary: ${NODE_PATH}`)
 
@@ -36,52 +19,6 @@ console.log(`[Scheduling] Using node binary: ${NODE_PATH}`)
 
 function generatePlistId(groupId) {
   return `com.imessage-scheduler.send-${groupId}-${Date.now()}`
-}
-
-/**
- * Calculate the next Date a schedule should fire.
- * @param {'once'|'recurring'} scheduleType
- * @param {{ dateTime?: string, interval?: string, time?: string }} scheduleData
- */
-function calculateNextRun(scheduleType, scheduleData) {
-  if (scheduleType === 'once') {
-    const d = new Date(scheduleData.dateTime)
-    if (isNaN(d.getTime())) throw new Error('Invalid dateTime: ' + scheduleData.dateTime)
-    return d
-  }
-
-  if (scheduleType === 'recurring') {
-    const [hours, minutes] = (scheduleData.time || '09:00').split(':').map(Number)
-    const now = new Date()
-
-    if (scheduleData.interval === 'daily') {
-      const nextRun = new Date(now)
-      nextRun.setHours(hours, minutes, 0, 0)
-      if (nextRun <= now) nextRun.setDate(nextRun.getDate() + 1)
-      return nextRun
-    }
-
-    if (scheduleData.interval === 'weekly') {
-      const targetDay = scheduleData.weekday ?? now.getDay()
-      const nextRun = new Date(now)
-      nextRun.setHours(hours, minutes, 0, 0)
-      let daysAhead = (targetDay - now.getDay() + 7) % 7
-      if (daysAhead === 0 && nextRun <= now) daysAhead = 7
-      nextRun.setDate(now.getDate() + daysAhead)
-      return nextRun
-    }
-
-    if (scheduleData.interval === 'monthly') {
-      const targetDate = scheduleData.monthDay ?? now.getDate()
-      const nextRun = new Date(now)
-      nextRun.setDate(targetDate)
-      nextRun.setHours(hours, minutes, 0, 0)
-      if (nextRun <= now) nextRun.setMonth(nextRun.getMonth() + 1)
-      return nextRun
-    }
-  }
-
-  throw new Error(`Unknown schedule type: ${scheduleType}`)
 }
 
 // ── Plist builder ─────────────────────────────────────────────────────────────
