@@ -260,7 +260,7 @@ function resolveRecipients(send) {
   const allMembers = memberCache[send.group_id]
   if (!allMembers) return null
   if (!send.member_ids) return allMembers
-  const ids = JSON.parse(send.member_ids).map(Number)
+  const ids = JSON.parse(send.member_ids).map(String)
   return ids.map(id => contactCache[id]).filter(Boolean)
 }
 
@@ -285,7 +285,7 @@ function recipientLabel(send) {
 async function openRecipientsPreview(send) {
   await getGroupMembers(send.group_id)
   if (send.member_ids) {
-    await ensureContactsInCache(JSON.parse(send.member_ids).map(Number))
+    await ensureContactsInCache(JSON.parse(send.member_ids).map(String))
   }
   recipientsPopup.value = resolveRecipients(send)
 }
@@ -325,7 +325,7 @@ async function load(isInitial = false) {
     // Fetch contacts referenced in member_ids that may no longer be in the group
     const extraIds = fresh
       .filter(s => s.member_ids)
-      .flatMap(s => JSON.parse(s.member_ids).map(Number))
+      .flatMap(s => JSON.parse(s.member_ids).map(String))
     await ensureContactsInCache(extraIds)
   } catch (err) {
     console.error('[ScheduledSends] Load error:', err)
@@ -460,7 +460,9 @@ async function startEdit(send) {
       editGroupMembers.value = members
       const storedIds = send.member_ids ? JSON.parse(send.member_ids) : null
       if (storedIds) {
-        editSelectedIds.value = new Set(storedIds.map(Number))
+        // JSON round-trips id types faithfully (numbers stay numbers, "gc:N" stays
+        // string), and m.id below needs to match natively for Set.has() to work.
+        editSelectedIds.value = new Set(storedIds)
       } else {
         // No stored selection means all members were targeted
         editSelectedIds.value = new Set(members.map(m => m.id))

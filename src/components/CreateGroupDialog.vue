@@ -6,11 +6,13 @@
       <input
         ref="inputEl"
         v-model="name"
+        maxlength="60"
         placeholder="Group name"
-        :class="{ 'input-error': error }"
+        :class="{ 'input-error': error, 'at-limit': name.length >= 60 }"
         @keyup.enter="submit"
         @keyup.escape="$emit('close')"
       />
+      <p class="char-counter" :class="{ 'at-limit': name.length >= 60 }">{{ name.length }}/60</p>
       <p v-if="error" class="error-msg">{{ error }}</p>
       <div class="actions">
         <button @click="$emit('close')">Cancel</button>
@@ -68,6 +70,18 @@ h2 { font-size: 18px; font-weight: 700; }
 
 input { width: 100%; }
 input.input-error { border-color: var(--error); }
+input.at-limit { border-color: var(--error); }
+
+.char-counter {
+  font-size: 12px;
+  color: var(--text-2);
+  margin: 4px 0 0 0;
+  padding: 0;
+}
+.char-counter.at-limit {
+  color: var(--error);
+}
+
 .error-msg { font-size: 12px; color: var(--error); margin-top: -4px; }
 
 .actions {

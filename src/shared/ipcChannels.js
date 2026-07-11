@@ -8,12 +8,14 @@ module.exports = {
   CONTACTS_DIAGNOSE:        'contacts:diagnose',
   CONTACTS_SYNC_FROM_MACOS: 'contacts:syncFromMacOS',
   CONTACTS_GET_ME:          'contacts:getMe',
+  CONTACTS_PARSE_CSV:       'contacts:parseCSV',
   CONTACTS_IMPORT_CSV:      'contacts:importCSV',
   CONTACTS_CHECK_CAPABILITY: 'contacts:checkCapability',
 
   // Database — contacts
   DB_GET_CONTACTS:          'db:getContacts',
   DB_GET_CONTACTS_BY_IDS:   'db:getContactsByIds',
+  DB_GET_CONTACT_BY_PHONE:  'db:getContactByPhone',
   DB_ADD_CONTACT:           'db:addContact',
   DB_DELETE_CONTACT:        'db:deleteContact',
 
@@ -29,6 +31,22 @@ module.exports = {
   DB_ADD_MEMBER_TO_GROUP:      'db:addMemberToGroup',
   DB_REMOVE_MEMBER_FROM_GROUP: 'db:removeMemberFromGroup',
   DB_SET_CONTACT_SERVICE:      'db:setContactService',
+  DB_IS_CONTACT_IN_GROUP:      'db:isContactInGroup',
+
+  // Database — chat group members (existing iMessage group threads added as members)
+  DB_GET_CHAT_GROUPS:              'db:getChatGroups',
+  DB_REFRESH_CHAT_GROUPS:          'db:refreshChatGroups',
+  DB_ADD_CHAT_GROUP_TO_GROUP:      'db:addChatGroupToGroup',
+  DB_REMOVE_CHAT_GROUP_FROM_GROUP: 'db:removeChatGroupFromGroup',
+
+  // Database — tags
+  TAG_GET_ALL_FOR_GROUP:   'tag:getAllForGroup',
+  TAG_CREATE:              'tag:create',
+  TAG_RENAME:              'tag:rename',
+  TAG_DELETE:              'tag:delete',
+  TAG_ADD_TO_MEMBER:       'tag:addToMember',
+  TAG_REMOVE_FROM_MEMBER:  'tag:removeFromMember',
+  TAG_SET_MEMBERS:         'tag:setMembers',
 
   // File dialogs
   DIALOG_OPEN_FILE:       'dialog:openFile',

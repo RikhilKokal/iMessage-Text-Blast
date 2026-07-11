@@ -99,6 +99,15 @@ ipcMain.handle(CH.CONTACTS_GET_ME, async () => {
   try { return await contactsService.getMeContact() } catch { return null }
 })
 
+ipcMain.handle(CH.CONTACTS_PARSE_CSV, async (_event, filePath) => {
+  try {
+    return csvService.parseCSVForPreview(filePath)
+  } catch (err) {
+    console.error('[IPC] contacts:parseCSV error:', err)
+    return { error: err.message, rows: [] }
+  }
+})
+
 ipcMain.handle(CH.CONTACTS_IMPORT_CSV, async (_event, filePath) => {
   try {
     return csvService.importFromCSV(filePath)
@@ -111,6 +120,7 @@ ipcMain.handle(CH.CONTACTS_IMPORT_CSV, async (_event, filePath) => {
 // Database — contacts CRUD
 ipcMain.handle(CH.DB_GET_CONTACTS, () => db.getContacts())
 ipcMain.handle(CH.DB_GET_CONTACTS_BY_IDS, (_event, ids) => db.getContactsByIds(ids))
+ipcMain.handle(CH.DB_GET_CONTACT_BY_PHONE, (_event, phone) => db.getContactByPhone(phone))
 
 ipcMain.handle(CH.DB_ADD_CONTACT, (_event, name, phone, email, source) => {
   return db.addContact(name, phone, email, source)
@@ -141,6 +151,43 @@ ipcMain.handle(CH.DB_ADD_MEMBER_TO_GROUP, (_event, groupId, contactId) => {
 })
 ipcMain.handle(CH.DB_REMOVE_MEMBER_FROM_GROUP, (_event, groupId, contactId) => db.removeMemberFromGroup(groupId, contactId))
 ipcMain.handle(CH.DB_SET_CONTACT_SERVICE, (_event, contactId, service) => { db.setContactService(contactId, service); return true })
+ipcMain.handle(CH.DB_IS_CONTACT_IN_GROUP, (_event, groupId, contactId) => db.isContactInGroup(groupId, contactId))
+
+ipcMain.handle(CH.DB_GET_CHAT_GROUPS, () => {
+  try {
+    return require('./src/services/chatGroupsService').listGroupChats()
+  } catch (err) {
+    console.error('[IPC] db:getChatGroups error:', err)
+    return []
+  }
+})
+ipcMain.handle(CH.DB_REFRESH_CHAT_GROUPS, () => {
+  try {
+    const { chats, updated } = require('./src/services/chatGroupsService').refreshGroupChats()
+    return { count: chats.length, updated }
+  } catch (err) {
+    console.error('[IPC] db:refreshChatGroups error:', err)
+    return { count: 0, updated: 0, error: err.message }
+  }
+})
+ipcMain.handle(CH.DB_ADD_CHAT_GROUP_TO_GROUP, (_event, groupId, chatIdentifier, displayName, participantHandles) => {
+  db.addChatGroupToGroup(groupId, chatIdentifier, displayName, participantHandles)
+  return true
+})
+ipcMain.handle(CH.DB_REMOVE_CHAT_GROUP_FROM_GROUP, (_event, groupId, chatGroupMemberId) => {
+  db.removeChatGroupFromGroup(groupId, chatGroupMemberId)
+  return true
+})
+
+// ── Tags ──────────────────────────────────────────────────────────────────────
+
+ipcMain.handle(CH.TAG_GET_ALL_FOR_GROUP, (_e, groupId) => db.getTagsForGroup(groupId))
+ipcMain.handle(CH.TAG_CREATE, (_e, groupId, name) => db.createTag(groupId, name))
+ipcMain.handle(CH.TAG_RENAME, (_e, tagId, newName) => db.renameTag(tagId, newName))
+ipcMain.handle(CH.TAG_DELETE, (_e, tagId) => { db.deleteTag(tagId); return true })
+ipcMain.handle(CH.TAG_ADD_TO_MEMBER, (_e, tagId, memberId) => { db.addTagToMember(tagId, memberId); return true })
+ipcMain.handle(CH.TAG_REMOVE_FROM_MEMBER, (_e, tagId, memberId) => { db.removeTagFromMember(tagId, memberId); return true })
+ipcMain.handle(CH.TAG_SET_MEMBERS, (_e, tagId, memberIds) => { db.setTagMembers(tagId, memberIds); return true })
 
 // ── iMessage capability check ─────────────────────────────────────────────────
 
@@ -189,8 +236,7 @@ function checkCapabilitySync(members) {
   try {
     for (const member of members) {
       const suffix = (member.phone || '').replace(/\D/g, '').slice(-10)
-      let confirmedIMessage = suffix ? stmtIMessagePhone.get(`%${suffix}`) : null
-      if (!confirmedIMessage && member.email) confirmedIMessage = stmtIMessageEmail.get(member.email)
+      const confirmedIMessage = suffix ? stmtIMessagePhone.get(`%${suffix}`) : null
       const confirmedSMS = !confirmedIMessage && suffix ? stmtSMSPhone.get(`%${suffix}`) : null
 
       let service = null
@@ -559,6 +605,13 @@ app.whenReady().then(() => {
   // Drain any attachment errors that fired while the app was closed
   mainWindow.webContents.once('did-finish-load', drainAttachmentErrors)
   mainWindow.on('focus', drainAttachmentErrors)
+
+  // Warm the chat-groups cache after the window paints (the underlying chat.db
+  // query is synchronous/slow, and FDA may not be granted yet — non-fatal either way).
+  mainWindow.webContents.once('did-finish-load', () => {
+    try { require('./src/services/chatGroupsService').listGroupChats() }
+    catch (err) { console.error('[Startup] chat group cache warm-up failed:', err.message) }
+  })
 
   // Watch a sentinel file that scheduled-send-helper touches when it finishes.
   // We watch this instead of app.db to avoid false-firing on the app's own writes.

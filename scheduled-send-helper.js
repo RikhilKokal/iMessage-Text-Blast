@@ -69,7 +69,8 @@ async function main() {
   try { attachmentPath = attachmentPathRaw ? JSON.parse(attachmentPathRaw) : null } catch { attachmentPath = attachmentPathRaw ? [attachmentPathRaw] : null }
   console.log(`[Helper] Scheduled send id=${schedId} for group=${groupId}`)
 
-  // 2. Load ALL group members (needed for total count in history)
+  // 2. Load ALL group members (needed for total count in history) — individual
+  // contacts plus any existing iMessage group-chat threads added as members.
   const allMemberRows = dbSelect(
     `SELECT c.id, c.name, c.phone, c.email, c.company, c.nickname, c.preferred_service
      FROM contacts c
@@ -79,7 +80,14 @@ async function main() {
     DB_PATH
   )
 
-  if (!allMemberRows.length) {
+  const chatGroupRows = dbSelect(
+    `SELECT id, chat_identifier, display_name, participant_handles
+     FROM chat_group_members
+     WHERE app_group_id = ${groupId}`,
+    DB_PATH
+  )
+
+  if (!allMemberRows.length && !chatGroupRows.length) {
     console.log('[Helper] Group has no members — exiting.')
     process.exit(0)
   }
@@ -87,9 +95,24 @@ async function main() {
   const toMember = ([id, name, phone, email, company, nickname, preferredService]) => ({
     id, name, phone, email, company, nickname,
     service: preferredService || 'iMessage',
+    type: 'contact',
   })
 
-  const allMembers = allMemberRows.map(toMember)
+  // No local better-sqlite3 access here to resolve handle → contact name, so unnamed
+  // chats fall back to a comma-joined list of raw participant handles instead of the
+  // friendlier resolved names the Electron main process shows in the member list.
+  const toChatGroupMember = ([id, chatIdentifier, displayName, participantHandlesJson]) => {
+    let handles = []
+    try { handles = JSON.parse(participantHandlesJson || '[]') } catch { handles = [] }
+    const name = (displayName && displayName.trim()) || handles.join(', ') || chatIdentifier
+    return {
+      id: `gc:${id}`, name, phone: chatIdentifier,
+      email: null, company: null, nickname: null,
+      service: 'iMessage', type: 'group_chat', chat_identifier: chatIdentifier,
+    }
+  }
+
+  const allMembers = [...allMemberRows.map(toMember), ...chatGroupRows.map(toChatGroupMember)]
 
   // Filter to selected member IDs (stored at schedule-creation time), or send to all
   const selectedIds = memberIdsJson ? new Set(JSON.parse(memberIdsJson).map(String)) : null

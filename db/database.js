@@ -41,7 +41,7 @@ function createTables() {
       email TEXT,
       company TEXT,
       nickname TEXT,
-      source TEXT CHECK(source IN ('macOS', 'manual')),
+      source TEXT CHECK(source IN ('macOS', 'csv', 'manual')),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -144,6 +144,41 @@ function createTables() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`)
   } catch { /* already exists */ }
+
+  // A "member" that is itself an existing iMessage group thread rather than a single
+  // contact. Can't live in `contacts` since that table requires a unique phone number.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_group_members (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      app_group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+      chat_identifier TEXT NOT NULL,
+      display_name TEXT,
+      participant_handles TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(app_group_id, chat_identifier)
+    );
+  `)
+
+  // Group-scoped tags for organizing members into reusable send-selections.
+  // member_tags.member_id is NOT a real FK — it polymorphically stores whatever
+  // getGroupMembers() already uses as a member's id (stringified contact id, or
+  // "gc:<id>" for a group-chat member), so it can point at either contacts or
+  // chat_group_members without two separate join tables.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(group_id, name)
+    );
+
+    CREATE TABLE IF NOT EXISTS member_tags (
+      tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+      member_id TEXT NOT NULL,
+      PRIMARY KEY (tag_id, member_id)
+    );
+  `)
 }
 
 // Strip everything except digits, then remove a leading country code 1
@@ -153,10 +188,54 @@ function normalizePhone(phone) {
   return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits
 }
 
+// Shared lookup for resolveHandleName/resolveHandleInfo: raw {name, nickname} row
+// for a chat.db handle (phone or email), or null if no local contact matches.
+function _lookupContactByHandle(handle) {
+  const digits = handle.replace(/\D/g, '')
+  if (digits.length >= 10) {
+    const suffix = digits.slice(-10)
+    return db.prepare('SELECT name, nickname FROM contacts WHERE normalized_phone LIKE ?').get('%' + suffix) || null
+  }
+  if (handle.includes('@')) {
+    return db.prepare('SELECT name, nickname FROM contacts WHERE LOWER(email) = LOWER(?)').get(handle) || null
+  }
+  return null
+}
+
+// Resolve a raw chat.db handle (phone or email) to a friendly local contact name,
+// falling back to the raw handle itself when no matching contact exists.
+function resolveHandleName(handle) {
+  const row = _lookupContactByHandle(handle)
+  return row ? (row.nickname || row.name) : handle
+}
+
+// Like resolveHandleName, but returns every name variant (real name + nickname) —
+// used for search-matching, since a user might search by either one, not just
+// whichever one resolveHandleName prefers for display.
+function resolveHandleInfo(handle) {
+  const row = _lookupContactByHandle(handle)
+  if (!row) return { displayName: handle, searchTerms: [handle] }
+  return {
+    displayName: row.nickname || row.name,
+    searchTerms: [...new Set([row.name, row.nickname, handle].filter(Boolean))],
+  }
+}
+
+function resolveChatGroupLabel(displayName, participantHandlesJson) {
+  if (displayName && displayName.trim()) return displayName.trim()
+  const handles = JSON.parse(participantHandlesJson || '[]')
+  return handles.map(resolveHandleName).join(', ') || 'Group Chat'
+}
+
 function contactExists(phone) {
   const normalized = normalizePhone(phone)
   const row = db.prepare('SELECT id FROM contacts WHERE normalized_phone = ?').get(normalized)
   return !!row
+}
+
+function getContactByPhone(phone) {
+  const normalized = normalizePhone(phone)
+  return db.prepare('SELECT id FROM contacts WHERE normalized_phone = ?').get(normalized)
 }
 
 /**
@@ -277,13 +356,19 @@ function removeStaleMacOSContacts(currentMacosIds) {
           INSERT OR IGNORE INTO group_members (group_id, contact_id)
           SELECT group_id, ? FROM group_members WHERE contact_id = ?
         `).run(newRow.id, id)
+        db.prepare(`
+          INSERT OR IGNORE INTO member_tags (tag_id, member_id)
+          SELECT tag_id, ? FROM member_tags WHERE member_id = ?
+        `).run(String(newRow.id), String(id))
       }
+      db.prepare('DELETE FROM member_tags WHERE member_id = ?').run(String(id))
       db.prepare('DELETE FROM contacts WHERE id = ?').run(id)
       removed++
     } else if (inGroup) {
       // Contact truly deleted from macOS but still in a group — keep as manual orphan
       db.prepare(`UPDATE contacts SET macos_id = NULL, source = 'manual' WHERE id = ?`).run(id)
     } else {
+      db.prepare('DELETE FROM member_tags WHERE member_id = ?').run(String(id))
       db.prepare('DELETE FROM contacts WHERE id = ?').run(id)
       removed++
     }
@@ -320,6 +405,7 @@ function getContactsByIds(ids) {
 }
 
 function deleteContact(id) {
+  db.prepare('DELETE FROM member_tags WHERE member_id = ?').run(String(id))
   db.prepare('DELETE FROM contacts WHERE id = ?').run(id)
 }
 
@@ -336,7 +422,7 @@ function importContactsFromCSV(rows) {
         continue
       }
       try {
-        const id = addContact(row.name, row.phone, row.email, 'manual')
+        const id = addContact(row.name, row.phone, row.email, 'csv')
         if (id) {
           success++
         } else {
@@ -366,10 +452,9 @@ function createGroup(name) {
 function getGroups() {
   return db.prepare(`
     SELECT g.id, g.name, g.created_at, g.updated_at,
-           COUNT(gm.contact_id) AS memberCount
+           (SELECT COUNT(*) FROM group_members WHERE group_id = g.id) +
+           (SELECT COUNT(*) FROM chat_group_members WHERE app_group_id = g.id) AS memberCount
     FROM groups g
-    LEFT JOIN group_members gm ON gm.group_id = g.id
-    GROUP BY g.id
     ORDER BY LOWER(g.name) ASC
   `).all()
 }
@@ -389,6 +474,8 @@ function updateGroupName(id, newName) {
 function deleteGroup(id) {
   db.transaction(() => {
     db.prepare('DELETE FROM group_members WHERE group_id = ?').run(id)
+    db.prepare('DELETE FROM chat_group_members WHERE app_group_id = ?').run(id)
+    db.prepare('DELETE FROM tags WHERE group_id = ?').run(id) // member_tags cascades via FK
     // Cancel and detach any scheduled sends for this group
     db.prepare('UPDATE scheduled_sends SET is_active = 0, group_id = NULL WHERE group_id = ?').run(id)
     // Null out the group_id in history so old records are kept but the FK is released
@@ -400,14 +487,51 @@ function deleteGroup(id) {
 // ── Group Members ─────────────────────────────────────────────────────────────
 
 function getGroupMembers(groupId) {
-  return db.prepare(`
+  const contacts = db.prepare(`
     SELECT c.id, c.name, c.phone, c.email, c.company, c.nickname, c.source,
            c.preferred_service AS service, c.service_confirmed
     FROM contacts c
     JOIN group_members gm ON gm.contact_id = c.id
     WHERE gm.group_id = ?
     ORDER BY c.name ASC
+  `).all(groupId).map(c => ({ ...c, type: 'contact' }))
+
+  const chatGroups = db.prepare(`
+    SELECT id, chat_identifier, display_name, participant_handles
+    FROM chat_group_members
+    WHERE app_group_id = ?
+  `).all(groupId).map(row => ({
+    id: `gc:${row.id}`,
+    name: resolveChatGroupLabel(row.display_name, row.participant_handles),
+    phone: row.chat_identifier,
+    email: null,
+    company: null,
+    nickname: null,
+    source: 'chat.db',
+    service: 'iMessage',
+    service_confirmed: 1,
+    type: 'group_chat',
+    chat_identifier: row.chat_identifier,
+    participant_count: JSON.parse(row.participant_handles || '[]').length,
+  })).sort((a, b) => a.name.localeCompare(b.name))
+
+  // Attach each member's tags via one query for the whole group, not per-member.
+  const tagRows = db.prepare(`
+    SELECT mt.member_id, t.id, t.name
+    FROM member_tags mt
+    JOIN tags t ON t.id = mt.tag_id
+    WHERE t.group_id = ?
   `).all(groupId)
+  const tagsByMemberId = new Map()
+  for (const r of tagRows) {
+    if (!tagsByMemberId.has(r.member_id)) tagsByMemberId.set(r.member_id, [])
+    tagsByMemberId.get(r.member_id).push({ id: r.id, name: r.name })
+  }
+  // contact.id comes back from better-sqlite3 as a number; chat-group member ids
+  // are already the "gc:N" string, so only the contacts branch needs String().
+  const withTags = (m) => ({ ...m, tags: tagsByMemberId.get(String(m.id)) || [] })
+
+  return [...contacts.map(withTags), ...chatGroups.map(withTags)]
 }
 
 function setContactService(contactId, service) {
@@ -425,6 +549,50 @@ function addMemberToGroup(groupId, contactId) {
 
 function removeMemberFromGroup(groupId, contactId) {
   db.prepare('DELETE FROM group_members WHERE group_id = ? AND contact_id = ?').run(groupId, contactId)
+  db.prepare(`DELETE FROM member_tags WHERE member_id = ? AND tag_id IN (SELECT id FROM tags WHERE group_id = ?)`)
+    .run(String(contactId), groupId)
+}
+
+// ── Chat Group Members (existing iMessage group threads added as members) ─────
+
+function addChatGroupToGroup(appGroupId, chatIdentifier, displayName, participantHandles) {
+  const already = db.prepare(
+    'SELECT 1 FROM chat_group_members WHERE app_group_id = ? AND chat_identifier = ?'
+  ).get(appGroupId, chatIdentifier)
+  if (already) throw new Error('This group chat is already in this group')
+
+  db.prepare(`
+    INSERT INTO chat_group_members (app_group_id, chat_identifier, display_name, participant_handles)
+    VALUES (?, ?, ?, ?)
+  `).run(appGroupId, chatIdentifier, displayName || null, JSON.stringify(participantHandles || []))
+}
+
+function removeChatGroupFromGroup(appGroupId, chatGroupMemberId) {
+  db.prepare('DELETE FROM chat_group_members WHERE id = ? AND app_group_id = ?').run(chatGroupMemberId, appGroupId)
+  db.prepare(`DELETE FROM member_tags WHERE member_id = ? AND tag_id IN (SELECT id FROM tags WHERE group_id = ?)`)
+    .run(`gc:${chatGroupMemberId}`, appGroupId)
+}
+
+// Refreshes display_name/participant_handles for any already-added chat_group_members
+// row whose chat_identifier matches a live chat.db entry — keeps renames and
+// membership changes from going stale, mirroring how upsertMacOSContact() keeps
+// synced contact fields current. Matched purely by chat_identifier (stable across
+// renames/membership changes), so rows with no live match are left untouched.
+function syncChatGroupsFromLive(liveChats) {
+  const stmt = db.prepare(`
+    UPDATE chat_group_members
+    SET display_name = ?, participant_handles = ?
+    WHERE chat_identifier = ?
+  `)
+  let updated = 0
+  const run = db.transaction((chats) => {
+    for (const c of chats) {
+      const info = stmt.run(c.display_name || null, JSON.stringify(c.participant_handles || []), c.chat_identifier)
+      updated += info.changes
+    }
+  })
+  run(liveChats)
+  return updated
 }
 
 function getGroupMemberIds(groupId) {
@@ -437,6 +605,51 @@ function isContactInGroup(groupId, contactId) {
   return !!db.prepare(
     'SELECT 1 FROM group_members WHERE group_id = ? AND contact_id = ?'
   ).get(groupId, contactId)
+}
+
+// ── Tags ──────────────────────────────────────────────────────────────────────
+
+function createTag(groupId, name) {
+  const trimmed = name.trim()
+  const existing = db.prepare('SELECT id FROM tags WHERE group_id = ? AND name = ?').get(groupId, trimmed)
+  if (existing) throw new Error(`Tag "${trimmed}" already exists in this group`)
+  const result = db.prepare('INSERT INTO tags (group_id, name) VALUES (?, ?)').run(groupId, trimmed)
+  return result.lastInsertRowid
+}
+
+function getTagsForGroup(groupId) {
+  return db.prepare('SELECT id, name FROM tags WHERE group_id = ? ORDER BY LOWER(name) ASC').all(groupId)
+}
+
+function renameTag(tagId, newName) {
+  const trimmed = newName.trim()
+  const tag = db.prepare('SELECT group_id FROM tags WHERE id = ?').get(tagId)
+  if (!tag) throw new Error('Tag not found')
+  const conflict = db.prepare('SELECT id FROM tags WHERE group_id = ? AND name = ? AND id != ?').get(tag.group_id, trimmed, tagId)
+  if (conflict) throw new Error(`Tag "${trimmed}" already exists in this group`)
+  db.prepare('UPDATE tags SET name = ? WHERE id = ?').run(trimmed, tagId)
+}
+
+function deleteTag(tagId) {
+  db.prepare('DELETE FROM tags WHERE id = ?').run(tagId) // member_tags cascades via FK
+}
+
+function addTagToMember(tagId, memberId) {
+  db.prepare('INSERT OR IGNORE INTO member_tags (tag_id, member_id) VALUES (?, ?)').run(tagId, String(memberId))
+}
+
+function removeTagFromMember(tagId, memberId) {
+  db.prepare('DELETE FROM member_tags WHERE tag_id = ? AND member_id = ?').run(tagId, String(memberId))
+}
+
+// Bulk replace-all for the "edit a tag's members" flow in Edit Tags.
+function setTagMembers(tagId, memberIds) {
+  const run = db.transaction((ids) => {
+    db.prepare('DELETE FROM member_tags WHERE tag_id = ?').run(tagId)
+    const insert = db.prepare('INSERT INTO member_tags (tag_id, member_id) VALUES (?, ?)')
+    for (const id of ids) insert.run(tagId, String(id))
+  })
+  run(memberIds)
 }
 
 // ── Scheduled Sends ───────────────────────────────────────────────────────────
@@ -618,11 +831,14 @@ module.exports = {
   init,
   // Contacts
   addContact, upsertMacOSContact, removeStaleMacOSContacts, getPrevMacOSContactIds,
-  getContacts, getContactsByIds, getContactsByIdsAsMember, deleteContact, importContactsFromCSV, contactExists,
+  getContacts, getContactsByIds, getContactsByIdsAsMember, deleteContact, importContactsFromCSV, contactExists, getContactByPhone,
   // Groups
   createGroup, getGroups, getGroupById, updateGroupName, deleteGroup,
   // Group members
   getGroupMembers, addMemberToGroup, removeMemberFromGroup, getGroupMemberIds, isContactInGroup, setContactService,
+  addChatGroupToGroup, removeChatGroupFromGroup, resolveHandleName, resolveHandleInfo, syncChatGroupsFromLive,
+  // Tags
+  createTag, getTagsForGroup, renameTag, deleteTag, addTagToMember, removeTagFromMember, setTagMembers,
   // Send history
   logSendAttempt, logSendRecipients, updateSendStatus, getSendHistory, getSendRecipients, clearSendHistory,
   // Scheduled sends

@@ -3,7 +3,7 @@
     <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dlg-title">
       <div class="icon">⚠️</div>
       <h2 id="dlg-title">Delete {{ itemType }}?</h2>
-      <p>You're about to permanently delete "<strong>{{ itemName }}</strong>". This action cannot be undone.</p>
+      <p>You're about to permanently delete "<strong>{{ itemName }}</strong>".<br>This action cannot be undone.</p>
       <div class="buttons">
         <button @click="$emit('close')">Cancel</button>
         <button class="btn-danger" @click="$emit('confirm')">Delete</button>
@@ -41,7 +41,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   border-radius: 12px;
   border-top: 4px solid var(--danger);
   padding: 32px 28px;
-  width: 400px;
+  width: 460px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   text-align: center;
   display: flex;

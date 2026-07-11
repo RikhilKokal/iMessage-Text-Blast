@@ -20,7 +20,6 @@
             Name {{ sortKey === 'name' ? (sortAsc ? '▲' : '▼') : '' }}
           </th>
           <th>Phone</th>
-          <th>Email</th>
           <th @click="sortBy('source')" class="sortable">
             Source {{ sortKey === 'source' ? (sortAsc ? '▲' : '▼') : '' }}
           </th>
@@ -30,7 +29,6 @@
         <tr v-for="contact in paginated" :key="contact.id">
           <td>{{ contact.name }}</td>
           <td>{{ contact.phone }}</td>
-          <td>{{ contact.email || '—' }}</td>
           <td>
             <span class="badge" :class="contact.source">{{ contact.source || 'manual' }}</span>
           </td>

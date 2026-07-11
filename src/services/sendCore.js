@@ -36,10 +36,27 @@ on run argv
 end run`
 }
 
+// Targets an EXISTING iMessage thread (e.g. a group chat) by its chat.db chat_identifier,
+// instead of addressing a single buddy/participant by phone.
+function buildSendToChatScript() {
+  return `\
+on run argv
+  set msgText to item 1 of argv
+  set chatId  to item 2 of argv
+  tell application "Messages"
+    set targetChat to a reference to chat id chatId
+    send msgText to targetChat
+  end tell
+  return "ok"
+end run`
+}
+
 const IMESSAGE_SCRIPT_PATH = path.join(os.tmpdir(), 'imsg_bulk_imessage.applescript')
 const SMS_SCRIPT_PATH      = path.join(os.tmpdir(), 'imsg_bulk_sms.applescript')
+const CHAT_SEND_SCRIPT_PATH = path.join(os.tmpdir(), 'imsg_bulk_chat.applescript')
 fs.writeFileSync(IMESSAGE_SCRIPT_PATH, buildSendScript('iMessage'), 'utf8')
 fs.writeFileSync(SMS_SCRIPT_PATH,      buildSendScript('SMS'),      'utf8')
+fs.writeFileSync(CHAT_SEND_SCRIPT_PATH, buildSendToChatScript(),    'utf8')
 
 // ── Phone normalisation ───────────────────────────────────────────────────────
 
@@ -60,6 +77,28 @@ async function sendViaImessage(phone, message) {
 
 async function sendViaSms(phone, message) {
   await execFileAsync('osascript', [SMS_SCRIPT_PATH, message, phone], { timeout: 15000 })
+}
+
+// chat.db stores the bare identifier (e.g. "chat229654607932297364"), but Messages'
+// AppleScript dictionary only recognizes chat ids prefixed with the service and chat
+// kind — "any;+;" for a group chat (confirmed against a real chat.db identifier).
+function toAppleScriptChatId(chatIdentifier) {
+  return chatIdentifier.startsWith('any;+;') ? chatIdentifier : `any;+;${chatIdentifier}`
+}
+
+async function sendViaImessageToChat(chatIdentifier, message) {
+  await execFileAsync('osascript', [CHAT_SEND_SCRIPT_PATH, message, toAppleScriptChatId(chatIdentifier)], { timeout: 15000 })
+}
+
+// Individual (non-group) existing-thread addressing uses "any;-;" instead of "any;+;".
+// Lets Messages.app resolve the correct service (iMessage or SMS) itself for a contact
+// we already have a thread with — no chat.db read required, so this works without FDA.
+function toAppleScriptIndividualChatId(e164Phone) {
+  return e164Phone.startsWith('any;-;') ? e164Phone : `any;-;${e164Phone}`
+}
+
+async function sendViaImessageToIndividualChat(e164Phone, message) {
+  await execFileAsync('osascript', [CHAT_SEND_SCRIPT_PATH, message, toAppleScriptIndividualChatId(e164Phone)], { timeout: 15000 })
 }
 
 function smsError(err) {
@@ -118,7 +157,7 @@ async function pollDelivery(phone, beforeMs, chatDbQuery) {
   while (Date.now() < deadline) {
     try {
       const rows = chatDbQuery(`
-        SELECT m.error, m.is_delivered
+        SELECT m.error, m.is_delivered, m.service
         FROM   message m
         JOIN   handle  h ON h.rowid = m.handle_id
         WHERE  m.is_from_me = 1
@@ -128,9 +167,9 @@ async function pollDelivery(phone, beforeMs, chatDbQuery) {
         LIMIT  1
       `)
       if (rows.length > 0) {
-        const [error, isDelivered] = rows[0]
+        const [error, isDelivered, service] = rows[0]
         if (Number(error) !== 0)     return { status: 'failed', error: Number(error) }
-        if (Number(isDelivered) === 1) return { status: 'delivered' }
+        if (Number(isDelivered) === 1) return { status: 'delivered', service }
       }
     } catch { /* DB locked — retry */ }
 
@@ -149,16 +188,61 @@ async function sendAttachment(e164, attachmentPath, service = 'iMessage') {
   try {
     fs.copyFileSync(attachmentPath, picPath)
     const svcType = service === 'SMS' ? 'SMS' : 'iMessage'
+    // Use "buddy" addressing, not "participant" — participant can only resolve an
+    // existing conversation, so attachment-only sends (no preceding text) to a
+    // brand-new contact silently fail. "buddy" can cold-start a conversation, same
+    // as the text-send script already relies on.
     const script  = `set theFile to POSIX file "${picPath}"
 tell application "Messages"
   set targetService to 1st account whose service type = ${svcType}
-  set targetBuddy to participant "${e164}" of targetService
+  set targetBuddy to buddy "${e164}" of targetService
   send theFile to targetBuddy
 end tell`
     await execFileAsync('osascript', ['-e', script], { timeout: 30000 })
     await sleep(5000)
   } catch (fileErr) {
     console.error(`[Send] Attachment failed for ${e164}: ${(fileErr.stderr || fileErr.message || '').trim()}`)
+  } finally {
+    try { fs.unlinkSync(picPath) } catch (_) {}
+  }
+}
+
+async function sendAttachmentToChat(chatIdentifier, attachmentPath) {
+  if (!attachmentPath || !fs.existsSync(attachmentPath)) return
+  const ext     = path.extname(attachmentPath)
+  const picPath = path.join(os.homedir(), 'Pictures', `imsg_tmp_${Date.now()}${ext}`)
+  try {
+    fs.copyFileSync(attachmentPath, picPath)
+    const script  = `set theFile to POSIX file "${picPath}"
+tell application "Messages"
+  set targetChat to a reference to chat id "${toAppleScriptChatId(chatIdentifier)}"
+  send theFile to targetChat
+end tell`
+    await execFileAsync('osascript', ['-e', script], { timeout: 30000 })
+    await sleep(5000)
+  } catch (fileErr) {
+    console.error(`[Send] Attachment failed for chat ${chatIdentifier}: ${(fileErr.stderr || fileErr.message || '').trim()}`)
+  } finally {
+    try { fs.unlinkSync(picPath) } catch (_) {}
+  }
+}
+
+// Unlike sendAttachment/sendAttachmentToChat, this does NOT swallow its own errors —
+// sendMessage() needs the exception to propagate so it can decide whether to fall back
+// to the standard buddy-addressed attachment path (e.g. no existing thread, -1728).
+async function sendAttachmentToIndividualChat(e164Phone, attachmentPath) {
+  if (!attachmentPath || !fs.existsSync(attachmentPath)) return
+  const ext     = path.extname(attachmentPath)
+  const picPath = path.join(os.homedir(), 'Pictures', `imsg_tmp_${Date.now()}${ext}`)
+  try {
+    fs.copyFileSync(attachmentPath, picPath)
+    const script  = `set theFile to POSIX file "${picPath}"
+tell application "Messages"
+  set targetChat to a reference to chat id "${toAppleScriptIndividualChatId(e164Phone)}"
+  send theFile to targetChat
+end tell`
+    await execFileAsync('osascript', ['-e', script], { timeout: 30000 })
+    await sleep(5000)
   } finally {
     try { fs.unlinkSync(picPath) } catch (_) {}
   }
@@ -180,6 +264,70 @@ async function sendMessage(phone, message, preferredService = 'iMessage', chatDb
   const paths = Array.isArray(attachmentPaths) ? attachmentPaths.filter(Boolean) : (attachmentPaths ? [attachmentPaths] : [])
 
   const hasText = message && message.trim().length > 0
+
+  // ── Attempt 0: address an EXISTING thread via "any;-;<e164>" chat id. ──────────
+  // More authoritative than a possibly-stale cached preferredService, and — unlike
+  // the buddy-addressed path below — doesn't require FDA to resolve the correct
+  // service, since it's pure Messages.app automation rather than a chat.db read.
+  // Tried before the preferredService gate for that reason. Any failure (most
+  // commonly -1728, "no existing chat") falls through to the unchanged logic
+  // below — no error-type discrimination needed, since falling through is always
+  // safe (nothing was sent yet) and low-cost (one extra osascript round-trip).
+  if (hasText) {
+    const beforeMs = Date.now()
+    try {
+      await sendViaImessageToIndividualChat(e164, message)
+      const result = await pollDelivery(e164, beforeMs, chatDbQuery)
+
+      if (result.fdaMissing || result.status === 'delivered' || result.status === 'timeout') {
+        const via = result.service || 'iMessage'
+        const unconfirmed = result.status === 'timeout' || result.fdaMissing
+        console.log(`[Send] ${e164}: sent via existing thread (any;-;) → ${via}${unconfirmed ? ' (unconfirmed)' : ''}`)
+        for (const p of paths) {
+          try { await sendAttachmentToIndividualChat(e164, p) }
+          catch (err) { console.error(`[Send] Attachment failed for existing thread ${e164}: ${(err.stderr || err.message || '').trim()}`) }
+        }
+        return { success: true, phone: e164, via, unconfirmed }
+      }
+
+      // The any-addressed send already went out once and genuinely failed to
+      // deliver — do NOT fall through to the buddy-addressed logic below, since
+      // that would re-send the text and risk a duplicate message. Go straight to
+      // an SMS retry instead, mirroring what the standard path does after its
+      // own iMessage failure, just without redundantly re-attempting iMessage.
+      console.log(`[Send] ${e164}: existing-thread send failed (error ${result.error}), retrying via SMS…`)
+      try {
+        await sendViaSms(e164, message)
+        for (const p of paths) await sendAttachment(e164, p, 'SMS')
+        return { success: true, phone: e164, via: 'SMS', autoRouted: true }
+      } catch (smsErr) {
+        return {
+          success: false,
+          phone: e164,
+          error: `iMessage failed and SMS unavailable. Enable Text Message Forwarding on your iPhone. (${smsError(smsErr)})`,
+        }
+      }
+    } catch (err) {
+      console.log(`[Send] ${e164}: no existing thread for "any" addressing (${(err.stderr || err.message || '').trim()}), falling back to standard send…`)
+    }
+  } else if (paths.length) {
+    // Attachment-only send — same any-first, fall-back-on-failure pattern, but
+    // no delivery polling exists for attachment-only sends today, so none is
+    // added here either.
+    try {
+      await sendAttachmentToIndividualChat(e164, paths[0])
+      for (let i = 1; i < paths.length; i++) {
+        try { await sendAttachmentToIndividualChat(e164, paths[i]) }
+        catch (err) { console.error(`[Send] Attachment failed for existing thread ${e164}: ${(err.stderr || err.message || '').trim()}`) }
+      }
+      console.log(`[Send] ${e164}: attachment(s) sent via existing thread (any;-;)`)
+      return { success: true, phone: e164, via: 'iMessage' }
+    } catch (err) {
+      console.log(`[Send] ${e164}: no existing thread for "any" attachment addressing (${(err.stderr || err.message || '').trim()}), falling back to standard send…`)
+    }
+  }
+
+  // ── Existing logic below, unchanged ─────────────────────────────────────────
 
   if (preferredService === 'SMS') {
     try {
@@ -221,12 +369,45 @@ async function sendMessage(phone, message, preferredService = 'iMessage', chatDb
     }
   }
 
-  // Attachment-only send
+  // Attachment-only send. sendAttachment() intentionally swallows its own errors
+  // (best-effort per-attachment, so one bad attachment doesn't abort an otherwise-
+  // successful message elsewhere in this function) — so we can't rely on it
+  // throwing to detect an iMessage delivery failure here. Poll chat.db instead,
+  // mirroring the hasText branch above, and retry via SMS if it didn't deliver.
+  if (paths.length === 0) return { success: true, phone: e164, via: 'iMessage' }
+
+  const beforeMs = Date.now()
+  await sendAttachment(e164, paths[0], 'iMessage')
+  const result = await pollDelivery(e164, beforeMs, chatDbQuery)
+
+  if (result.fdaMissing || result.status === 'delivered' || result.status === 'timeout') {
+    for (const p of paths.slice(1)) await sendAttachment(e164, p, 'iMessage')
+    return { success: true, phone: e164, via: 'iMessage', unconfirmed: result.status === 'timeout' || result.fdaMissing }
+  }
+
+  console.log(`[Send] ${e164}: iMessage attachment failed (error ${result.error}), retrying via SMS…`)
+  for (const p of paths) await sendAttachment(e164, p, 'SMS')
+  return { success: true, phone: e164, via: 'SMS', autoRouted: true }
+}
+
+/**
+ * Send a templated message into an EXISTING iMessage group thread by chat_identifier,
+ * rather than to a single buddy/participant.
+ *
+ * Group chats have no SMS equivalent to fall back to, and chat.db delivery polling is
+ * keyed off a single recipient handle — it can't confirm delivery for a multi-handle
+ * thread — so this is fire-and-forget and always reports `unconfirmed: true`.
+ */
+async function sendMessageToChat(chatIdentifier, message, attachmentPaths = null) {
+  const paths = Array.isArray(attachmentPaths) ? attachmentPaths.filter(Boolean) : (attachmentPaths ? [attachmentPaths] : [])
+  const hasText = message && message.trim().length > 0
+
   try {
-    for (const p of paths) await sendAttachment(e164, p, 'iMessage')
-    return { success: true, phone: e164, via: 'iMessage' }
+    if (hasText) await sendViaImessageToChat(chatIdentifier, message)
+    for (const p of paths) await sendAttachmentToChat(chatIdentifier, p)
+    return { success: true, phone: chatIdentifier, via: 'iMessage', unconfirmed: true }
   } catch (err) {
-    return { success: false, phone: e164, error: (err.stderr || err.message || '').trim() }
+    return { success: false, phone: chatIdentifier, error: (err.stderr || err.message || '').trim() }
   }
 }
 
@@ -240,7 +421,7 @@ function renderTemplate(template, contact) {
     .replace(/⟦lastName⟧/g,  lastName)
     .replace(/⟦fullName⟧/g,  contact.name     || '')
     .replace(/⟦email⟧/g,     contact.email    || '')
-    .replace(/⟦phone⟧/g,     contact.phone    || '')
+    .replace(/⟦phone⟧/g,     contact.type === 'group_chat' ? '' : (contact.phone || ''))
     .replace(/⟦company⟧/g,   contact.company  || '')
     .replace(/⟦nickname⟧/g,  contact.nickname || firstName)
 }
@@ -267,8 +448,9 @@ async function sendToGroup(members, templateText, chatDbQuery, { onProgress, att
   for (let i = 0; i < members.length; i++) {
     const member  = members[i]
     const message = renderTemplate(templateText, member)
-    const service = member.service === 'SMS' ? 'SMS' : 'iMessage'
-    const result  = await sendMessage(member.phone, message, service, chatDbQuery, attachmentPath)
+    const result  = member.type === 'group_chat'
+      ? await sendMessageToChat(member.chat_identifier, message, attachmentPath)
+      : await sendMessage(member.phone, message, member.service === 'SMS' ? 'SMS' : 'iMessage', chatDbQuery, attachmentPath)
 
     if (result.success) {
       succeeded.push({ ...member, via: result.via, autoRouted: result.autoRouted })

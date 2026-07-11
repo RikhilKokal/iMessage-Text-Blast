@@ -102,7 +102,7 @@ const renderedMessage = computed(() => {
     .replace(/⟦lastName⟧/g,   c.name?.split(' ').slice(1).join(' ') ?? '')
     .replace(/⟦fullName⟧/g,   c.name     ?? '')
     .replace(/⟦email⟧/g,      c.email    || '(no email)')
-    .replace(/⟦phone⟧/g,      c.phone    || '(no phone)')
+    .replace(/⟦phone⟧/g,      c.type === 'group_chat' ? '(group chat)' : (c.phone || '(no phone)'))
     .replace(/⟦company⟧/g,    c.company  || '(no company)')
     .replace(/⟦nickname⟧/g,   c.nickname || c.name?.split(' ')[0] || '')
 })

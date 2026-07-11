@@ -7,11 +7,13 @@ const CH = {
   CONTACTS_DIAGNOSE:        'contacts:diagnose',
   CONTACTS_SYNC_FROM_MACOS: 'contacts:syncFromMacOS',
   CONTACTS_GET_ME:          'contacts:getMe',
+  CONTACTS_PARSE_CSV:       'contacts:parseCSV',
   CONTACTS_IMPORT_CSV:      'contacts:importCSV',
   CONTACTS_CHECK_CAPABILITY: 'contacts:checkCapability',
 
   DB_GET_CONTACTS:          'db:getContacts',
   DB_GET_CONTACTS_BY_IDS:   'db:getContactsByIds',
+  DB_GET_CONTACT_BY_PHONE:  'db:getContactByPhone',
   DB_ADD_CONTACT:           'db:addContact',
   DB_DELETE_CONTACT:        'db:deleteContact',
 
@@ -25,6 +27,20 @@ const CH = {
   DB_ADD_MEMBER_TO_GROUP:      'db:addMemberToGroup',
   DB_REMOVE_MEMBER_FROM_GROUP: 'db:removeMemberFromGroup',
   DB_SET_CONTACT_SERVICE:      'db:setContactService',
+  DB_IS_CONTACT_IN_GROUP:      'db:isContactInGroup',
+
+  DB_GET_CHAT_GROUPS:              'db:getChatGroups',
+  DB_REFRESH_CHAT_GROUPS:          'db:refreshChatGroups',
+  DB_ADD_CHAT_GROUP_TO_GROUP:      'db:addChatGroupToGroup',
+  DB_REMOVE_CHAT_GROUP_FROM_GROUP: 'db:removeChatGroupFromGroup',
+
+  TAG_GET_ALL_FOR_GROUP:   'tag:getAllForGroup',
+  TAG_CREATE:              'tag:create',
+  TAG_RENAME:              'tag:rename',
+  TAG_DELETE:              'tag:delete',
+  TAG_ADD_TO_MEMBER:       'tag:addToMember',
+  TAG_REMOVE_FROM_MEMBER:  'tag:removeFromMember',
+  TAG_SET_MEMBERS:         'tag:setMembers',
 
   DIALOG_OPEN_FILE:       'dialog:openFile',
   DIALOG_OPEN_ATTACHMENT: 'dialog:openAttachment',
@@ -73,6 +89,9 @@ contextBridge.exposeInMainWorld('api', {
   getMeContact: () =>
     ipcRenderer.invoke(CH.CONTACTS_GET_ME),
 
+  parseCSV: (filePath) =>
+    ipcRenderer.invoke(CH.CONTACTS_PARSE_CSV, filePath),
+
   importCSV: (filePath) =>
     ipcRenderer.invoke(CH.CONTACTS_IMPORT_CSV, filePath),
 
@@ -81,6 +100,8 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke(CH.DB_GET_CONTACTS),
   getContactsByIds: (ids) =>
     ipcRenderer.invoke(CH.DB_GET_CONTACTS_BY_IDS, ids),
+  getContactByPhone: (phone) =>
+    ipcRenderer.invoke(CH.DB_GET_CONTACT_BY_PHONE, phone),
 
   addContact: (name, phone, email, source) =>
     ipcRenderer.invoke(CH.DB_ADD_CONTACT, name, phone, email, source),
@@ -120,6 +141,37 @@ contextBridge.exposeInMainWorld('api', {
 
   setContactService: (contactId, service) =>
     ipcRenderer.invoke(CH.DB_SET_CONTACT_SERVICE, contactId, service),
+
+  isContactInGroup: (groupId, contactId) =>
+    ipcRenderer.invoke(CH.DB_IS_CONTACT_IN_GROUP, groupId, contactId),
+
+  getChatGroups: () =>
+    ipcRenderer.invoke(CH.DB_GET_CHAT_GROUPS),
+
+  refreshChatGroups: () =>
+    ipcRenderer.invoke(CH.DB_REFRESH_CHAT_GROUPS),
+
+  addChatGroupToGroup: (groupId, chatIdentifier, displayName, participantHandles) =>
+    ipcRenderer.invoke(CH.DB_ADD_CHAT_GROUP_TO_GROUP, groupId, chatIdentifier, displayName, participantHandles),
+
+  removeChatGroupFromGroup: (groupId, chatGroupMemberId) =>
+    ipcRenderer.invoke(CH.DB_REMOVE_CHAT_GROUP_FROM_GROUP, groupId, chatGroupMemberId),
+
+  // ── Tags ──────────────────────────────────────────────────
+  getTagsForGroup: (groupId) =>
+    ipcRenderer.invoke(CH.TAG_GET_ALL_FOR_GROUP, groupId),
+  createTag: (groupId, name) =>
+    ipcRenderer.invoke(CH.TAG_CREATE, groupId, name),
+  renameTag: (tagId, name) =>
+    ipcRenderer.invoke(CH.TAG_RENAME, tagId, name),
+  deleteTag: (tagId) =>
+    ipcRenderer.invoke(CH.TAG_DELETE, tagId),
+  addTagToMember: (tagId, memberId) =>
+    ipcRenderer.invoke(CH.TAG_ADD_TO_MEMBER, tagId, memberId),
+  removeTagFromMember: (tagId, memberId) =>
+    ipcRenderer.invoke(CH.TAG_REMOVE_FROM_MEMBER, tagId, memberId),
+  setTagMembers: (tagId, memberIds) =>
+    ipcRenderer.invoke(CH.TAG_SET_MEMBERS, tagId, memberIds),
 
   checkCapability: (members) =>
     ipcRenderer.invoke(CH.CONTACTS_CHECK_CAPABILITY, members),

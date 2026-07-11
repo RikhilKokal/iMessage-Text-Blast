@@ -7,11 +7,14 @@
           v-if="editingName"
           ref="nameInput"
           v-model="draftName"
+          maxlength="60"
           class="name-editor"
+          :class="{ 'at-limit': draftName.length >= 60 }"
           @blur="saveName"
           @keyup.enter="saveName"
           @keyup.escape="cancelEdit"
         />
+        <p v-if="editingName" class="char-counter" :class="{ 'at-limit': draftName.length >= 60 }">{{ draftName.length }}/60</p>
         <h1 v-else class="template-title" @click="startEdit" title="Click to rename">
           {{ localName || 'Untitled Template' }}
           <span class="edit-hint">✎</span>
@@ -552,6 +555,17 @@ async function sendNow() {
 .template-title:hover .edit-hint { opacity: 1; }
 
 .name-editor { font-size: 20px; max-width: 400px; }
+.name-editor.at-limit { border-color: var(--error); }
+
+.char-counter {
+  font-size: 12px;
+  color: var(--text-2);
+  margin: 4px 0 0 0;
+  padding: 0;
+}
+.char-counter.at-limit {
+  color: var(--error);
+}
 
 .detail-body { padding: 20px 28px; gap: 16px; }
 .attachment-row { margin-top: -12px; }

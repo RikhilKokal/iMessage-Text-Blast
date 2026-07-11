@@ -30,8 +30,14 @@
         <button class="btn-secondary small full-width" @click="showScheduled = true">
           🕐 Scheduled Texts
         </button>
+        <button class="btn-secondary small full-width" @click="importContacts()">
+          📥 Import Contacts (CSV)
+        </button>
         <button class="btn-secondary small full-width" @click="syncContacts()" :disabled="syncing">
           {{ syncing ? 'Syncing…' : '↻ Refresh Contacts' }}
+        </button>
+        <button class="btn-secondary small full-width" @click="refreshGroupChats()" :disabled="refreshingGroupChats">
+          {{ refreshingGroupChats ? 'Refreshing…' : '↻ Refresh Group Chats' }}
         </button>
         <button class="btn-secondary small full-width" @click="toggleTheme">
           {{ isDark ? '☀️ Light Mode' : '🌙 Dark Mode' }}
@@ -59,12 +65,15 @@
         v-if="selectedGroup"
         :group="selectedGroup"
         :members="groupMembers"
+        :tags="groupTags"
         :hasFda="!fdaBanner"
         @update-name="updateGroupName"
         @delete-group="deleteGroup"
         @add-member="addMemberToGroup"
+        @add-group-chat="addGroupChatToGroup"
         @remove-member="removeMemberFromGroup"
-        @set-service="selectGroup(selectedGroupId)"
+        @set-service="async () => { await loadGroups(); await selectGroup(selectedGroupId) }"
+        @tags-changed="selectGroup(selectedGroupId)"
       />
       <TemplateDetail
         v-else-if="selectedTemplate"
@@ -157,6 +166,13 @@
       @close="showScheduled = false"
     />
 
+    <CSVImportModal
+      v-if="showImportModal"
+      title="Import Contacts"
+      :on-import-selected="importCsvGlobally"
+      @close="showImportModal = false"
+    />
+
     <!-- Scheduled sync modal -->
     <ScheduledSyncModal
       v-if="scheduledSyncModal"
@@ -180,6 +196,7 @@ import CreateGroupDialog from './components/CreateGroupDialog.vue'
 import SendHistoryDashboard    from './components/SendHistoryDashboard.vue'
 import ScheduledSendsDashboard from './components/ScheduledSendsDashboard.vue'
 import ScheduledSyncModal from './components/ScheduledSyncModal.vue'
+import CSVImportModal from './components/CSVImportModal.vue'
 import Toast from './components/Toast.vue'
 import NotificationsPanel from './components/NotificationsPanel.vue'
 import AttachmentErrorDialog from './components/AttachmentErrorDialog.vue'
@@ -210,10 +227,13 @@ const groups = ref([])
 const selectedGroupId = ref(null)
 const groupsLoading = ref(true)
 const groupMembers = ref([])
+const groupTags = ref([])
 const showCreateDialog = ref(false)
 const showHistory   = ref(false)
 const showScheduled = ref(false)
+const showImportModal = ref(false)
 const syncing = ref(false)
+const refreshingGroupChats = ref(false)
 const lastSyncTime = ref(null)
 const toast = ref({ message: '', type: 'success' })
 const scheduledRefreshKey = ref(0)
@@ -325,6 +345,7 @@ async function selectGroup(groupId) {
   selectedGroupId.value = groupId
   selectedTemplateId.value = null
   groupMembers.value = await window.api.getGroupMembers(groupId)
+  groupTags.value = await window.api.getTagsForGroup(groupId)
 }
 
 const createGroupError = ref('')
@@ -387,9 +408,14 @@ function resetScheduledSyncPreference() {
 }
 
 async function applyScheduledSync(action, contactId, sends, allGroupMembers) {
-  const cid = Number(contactId)
+  // Ids are opaque and must keep their native type — contacts use numeric SQLite ids,
+  // group-chat members use "gc:<id>" strings — since Set/array equality elsewhere
+  // (e.g. ScheduledSendsDashboard's editSelectedIds) compares against m.id directly
+  // without coercion. JSON round-trips both types faithfully, so no Number()/String()
+  // coercion here.
+  const cid = contactId
   for (const send of sends) {
-    const existingIds = send.member_ids ? JSON.parse(send.member_ids).map(Number) : null
+    const existingIds = send.member_ids ? JSON.parse(send.member_ids) : null
     let newIds
     if (action === 'add') {
       if (existingIds === null) continue // null means "all" — already included
@@ -397,9 +423,9 @@ async function applyScheduledSync(action, contactId, sends, allGroupMembers) {
       newIds = [...existingIds, cid]
     } else {
       if (existingIds !== null && !existingIds.includes(cid)) continue // not in explicit list, nothing to remove
-      const base = existingIds ?? allGroupMembers.map(m => Number(m.id))
+      const base = existingIds ?? allGroupMembers.map(m => m.id)
       newIds = base.filter(id => id !== cid)
-      const remainingCount = allGroupMembers.filter(m => Number(m.id) !== cid).length
+      const remainingCount = allGroupMembers.filter(m => m.id !== cid).length
       if (newIds.length === remainingCount) newIds = null // covers everyone remaining — back to "all"
     }
     const interval = send.schedule_interval ? JSON.parse(send.schedule_interval) : {}
@@ -423,10 +449,9 @@ async function maybePromptScheduledSync(action, contactId, contactName, allGroup
   if (pref === 'never') {
     // Still need to pin explicit lists for removes so the contact isn't silently dropped
     if (action === 'remove') {
-      const cid = Number(contactId)
       for (const send of sends) {
         if (send.member_ids !== null) continue
-        const pinnedIds = allGroupMembers.map(m => Number(m.id))
+        const pinnedIds = allGroupMembers.map(m => m.id)
         const interval = send.schedule_interval ? JSON.parse(send.schedule_interval) : {}
         const scheduleData = send.schedule_type === 'once'
           ? { dateTime: send.next_run }
@@ -464,10 +489,9 @@ async function onSyncModalCancel(saveChoice) {
   // must be pinned to an explicit list that still includes the removed contact —
   // otherwise they'd be silently dropped because they're no longer in the group.
   if (action === 'remove') {
-    const cid = Number(contactId)
     for (const send of sends) {
       if (send.member_ids !== null) continue // explicit list already preserved
-      const pinnedIds = allGroupMembers.map(m => Number(m.id)) // includes the removed contact
+      const pinnedIds = allGroupMembers.map(m => m.id) // includes the removed contact
       const interval = send.schedule_interval ? JSON.parse(send.schedule_interval) : {}
       const scheduleData = send.schedule_type === 'once'
         ? { dateTime: send.next_run }
@@ -491,17 +515,73 @@ async function addMemberToGroup(contactId) {
   }
 }
 
-async function removeMemberFromGroup(contactId) {
+async function addGroupChatToGroup(chat) {
   try {
-    const contact = groupMembers.value.find(m => m.id === contactId)
-    const name = contact?.name ?? 'This person'
-    const membersWithContact = [...groupMembers.value] // capture before removal
-    await window.api.removeMemberFromGroup(selectedGroupId.value, contactId)
+    await window.api.addChatGroupToGroup(selectedGroupId.value, chat.chat_identifier, chat.display_name, chat.participant_handles)
     await selectGroup(selectedGroupId.value)
     await loadGroups()
-    await maybePromptScheduledSync('remove', contactId, name, membersWithContact)
+    const added = groupMembers.value.find(m => m.type === 'group_chat' && m.chat_identifier === chat.chat_identifier)
+    if (added) await maybePromptScheduledSync('add', added.id, added.name, groupMembers.value)
   } catch (err) {
     showToast(err.message, 'error')
+  }
+}
+
+async function removeMemberFromGroup(member) {
+  try {
+    const membersWithContact = [...groupMembers.value] // capture before removal
+    if (member.type === 'group_chat') {
+      const rawId = Number(String(member.id).replace('gc:', ''))
+      await window.api.removeChatGroupFromGroup(selectedGroupId.value, rawId)
+    } else {
+      await window.api.removeMemberFromGroup(selectedGroupId.value, member.id)
+    }
+    await selectGroup(selectedGroupId.value)
+    await loadGroups()
+    await maybePromptScheduledSync('remove', member.id, member.name, membersWithContact)
+  } catch (err) {
+    showToast(err.message, 'error')
+  }
+}
+
+function importContacts() {
+  showImportModal.value = true
+}
+
+async function importCsvGlobally(contacts) {
+  console.log(`[CSV Import] Starting global import of ${contacts.length} contacts`)
+
+  let added = 0
+  let alreadyImported = 0
+  for (const contact of contacts) {
+    try {
+      console.log(`[CSV Import] Adding contact: ${contact.name} (${contact.phone})`)
+      const id = await window.api.addContact(contact.name, contact.phone, '', 'csv')
+      console.log(`[CSV Import] addContact returned ID: ${id}`)
+
+      if (id) {
+        console.log(`[CSV Import] Successfully added contact`)
+        added++
+      } else {
+        console.log(`[CSV Import] addContact returned null (duplicate?)`)
+        alreadyImported++
+      }
+    } catch (err) {
+      console.error(`[CSV Import] Error adding contact ${contact.name}:`, err)
+      throw new Error(`Failed to add ${contact.name}: ${err.message}`)
+    }
+  }
+
+  console.log(`[CSV Import] Global import complete. Added ${added}/${contacts.length} contacts`)
+
+  if (added > 0 || alreadyImported > 0) {
+    const parts = []
+    if (added > 0) parts.push(`Added ${added} contact${added === 1 ? '' : 's'}`)
+    if (alreadyImported > 0) parts.push(`${alreadyImported} already imported`)
+    const message = parts.join(', ') + '.'
+    showToast(message)
+    await loadGroups()
+    if (selectedGroupId.value) await selectGroup(selectedGroupId.value)
   }
 }
 
@@ -529,6 +609,25 @@ async function syncContacts(silent = false) {
     console.error('[Contacts] Sync error:', err.message)
   } finally {
     syncing.value = false
+    if (selectedGroupId.value) await selectGroup(selectedGroupId.value)
+  }
+}
+
+async function refreshGroupChats() {
+  refreshingGroupChats.value = true
+  try {
+    const result = await window.api.refreshChatGroups()
+    if (result.error) {
+      showToast('Failed to refresh group chats: ' + result.error, 'error')
+    } else {
+      const parts = [`${result.count} found`]
+      if (result.updated > 0) parts.push(`${result.updated} membership${result.updated === 1 ? '' : 's'} updated`)
+      showToast(`Group chats refreshed: ${parts.join(', ')}.`)
+    }
+  } catch (err) {
+    console.error('[GroupChats] Refresh error:', err.message)
+  } finally {
+    refreshingGroupChats.value = false
     if (selectedGroupId.value) await selectGroup(selectedGroupId.value)
   }
 }

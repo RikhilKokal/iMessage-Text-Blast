@@ -7,11 +7,14 @@
           v-if="editingName"
           ref="nameInput"
           v-model="draftName"
+          maxlength="60"
           class="name-editor"
+          :class="{ 'at-limit': draftName.length >= 60 }"
           @blur="saveName"
           @keyup.enter="saveName"
           @keyup.escape="cancelEdit"
         />
+        <p v-if="editingName" class="char-counter" :class="{ 'at-limit': draftName.length >= 60 }">{{ draftName.length }}/60</p>
         <h1 v-else class="group-title" @click="startEdit" title="Click to rename">
           {{ group.name }}
           <span class="edit-hint">✎</span>
@@ -33,12 +36,20 @@
               <input type="checkbox" :checked="allSelected" @change="toggleAll" />
               All
             </label>
+            <SelectByTagDropdown
+              :members="members"
+              :tags="tags"
+              :selected-ids="selectedMemberIds"
+              @update:selected-ids="onSelectByTagUpdate"
+            />
+            <button class="btn-secondary small" @click="showEditTagsModal = true">Edit Tags</button>
             <button
-              v-if="members.length > 0 && props.hasFda"
+              v-if="checkableMembers.length > 0 && props.hasFda"
               class="btn-secondary small"
               :disabled="checkingCapability"
               @click="checkCapability"
-            >{{ checkingCapability ? `Checking ${checkedCount}/${props.members.length}…` : '🔍 Check iMessage' }}</button>
+            >{{ checkingCapability ? `Checking ${checkedCount}/${checkableMembers.length}…` : '🔍 Check iMessage' }}</button>
+            <button v-if="props.hasFda" class="btn-primary small" @click="showAddChatGroupModal = true">+ Add Group Chats</button>
             <button class="btn-primary small" @click="showAddModal = true">+ Add Member</button>
           </div>
         </div>
@@ -55,18 +66,27 @@
               :class="{ checked: selectedMemberIds.has(member.id) }"
               @click.stop="toggleMember(member.id)"
             ></span>
-            <div class="member-avatar">{{ initials(member.name) }}</div>
+            <div class="member-avatar">{{ member.type === 'group_chat' ? '👥' : initials(member.name) }}</div>
             <div class="member-info">
               <div class="member-name">{{ member.name }}</div>
-              <div class="member-sub">{{ member.phone }}{{ member.email ? ` · ${member.email}` : '' }}</div>
+              <div v-if="member.type === 'group_chat'" class="member-sub">{{ member.participant_count }} participants</div>
+              <div v-else class="member-sub">
+                {{ member.phone }}
+                <span v-if="member.source === 'csv'" class="csv-label">(Imported from CSV)</span>
+              </div>
+            </div>
+            <div class="member-tags">
+              <MemberTagList :member="member" @removed="tagId => removeTagFromMember(tagId, member.id)" />
+              <MemberTagPicker :member="member" :group-id="group.id" :group-tags="tags" @assigned="$emit('tags-changed')" />
             </div>
             <button
+              v-if="member.type !== 'group_chat'"
               class="btn-service"
               :class="!member.service_confirmed ? 'unknown' : member.service === 'SMS' ? 'sms' : 'imessage'"
               :title="!member.service_confirmed ? 'Unknown — click to set as iMessage' : member.service === 'SMS' ? 'Click to switch to iMessage' : 'Click to switch to SMS'"
               @click="toggleService(member)"
             >{{ !member.service_confirmed ? 'Unknown' : member.service === 'SMS' ? '📱 SMS' : '💬 iMessage' }}</button>
-            <button class="btn-remove" @click="$emit('remove-member', member.id)" title="Remove">×</button>
+            <button class="btn-remove" @click="$emit('remove-member', member)" title="Remove">×</button>
           </div>
         </div>
         <div v-else class="empty-card">No members yet — click "+ Add Member" to get started.</div>
@@ -143,9 +163,19 @@
     <!-- ── Modals ── -->
     <AddMemberModal
       v-if="showAddModal"
+      :group-id="group.id"
+      :group-name="group.name"
       :existingMemberIds="members.map(m => m.id)"
       @add="onAdd"
+      @imported="onImported"
       @close="showAddModal = false"
+    />
+
+    <AddGroupChatModal
+      v-if="showAddChatGroupModal"
+      :existingChatIdentifiers="members.filter(m => m.type === 'group_chat').map(m => m.chat_identifier)"
+      @add="onAddChatGroup"
+      @close="showAddChatGroupModal = false"
     />
 
     <DeleteConfirmDialog
@@ -153,6 +183,15 @@
       :itemName="group.name"
       @confirm="confirmDelete"
       @close="showDeleteDialog = false"
+    />
+
+    <EditTagsModal
+      v-if="showEditTagsModal"
+      :group="group"
+      :tags="tags"
+      :members="members"
+      @close="showEditTagsModal = false"
+      @changed="$emit('tags-changed')"
     />
 
     <ScheduleModal
@@ -179,6 +218,11 @@
 <script setup>
 import { ref, computed, watch, nextTick, inject, onMounted, onUnmounted } from 'vue'
 import AddMemberModal      from './AddMemberModal.vue'
+import AddGroupChatModal   from './AddGroupChatModal.vue'
+import EditTagsModal       from './EditTagsModal.vue'
+import MemberTagPicker     from './MemberTagPicker.vue'
+import MemberTagList       from './MemberTagList.vue'
+import SelectByTagDropdown from './SelectByTagDropdown.vue'
 import AttachmentPicker    from './AttachmentPicker.vue'
 import DeleteConfirmDialog from './DeleteConfirmDialog.vue'
 import MessagePreview      from './MessagePreview.vue'
@@ -193,9 +237,10 @@ import { VARIABLES, TOKEN_LABELS } from '../constants/variables'
 const props = defineProps({
   group:   { type: Object, required: true },
   members: { type: Array,  default: () => [] },
+  tags:    { type: Array,  default: () => [] },
   hasFda:  { type: Boolean, default: true },
 })
-const emit = defineEmits(['update-name', 'delete-group', 'add-member', 'remove-member', 'set-service'])
+const emit = defineEmits(['update-name', 'delete-group', 'add-member', 'add-group-chat', 'remove-member', 'set-service', 'tags-changed'])
 
 // ── State ──────────────────────────────────────────────────────────────────
 const editingName     = ref(false)
@@ -203,6 +248,8 @@ const draftName       = ref('')
 const nameInput       = ref(null)
 const tokenEditorEl   = ref(null)
 const showAddModal    = ref(false)
+const showAddChatGroupModal = ref(false)
+const showEditTagsModal = ref(false)
 const showDeleteDialog = ref(false)
 const showScheduleModal = ref(false)
 
@@ -212,6 +259,8 @@ function onKeydown(e) {
   if (showDeleteDialog.value)  { showDeleteDialog.value = false; return }
   if (showScheduleModal.value) { showScheduleModal.value = false; return }
   if (showAddModal.value)      { showAddModal.value = false; return }
+  if (showAddChatGroupModal.value) { showAddChatGroupModal.value = false; return }
+  if (showEditTagsModal.value) { showEditTagsModal.value = false; return }
 }
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
@@ -239,6 +288,10 @@ function toggleAll() {
   selectedMemberIds.value = allSelected.value
     ? new Set()
     : new Set(props.members.map(m => m.id))
+}
+
+function onSelectByTagUpdate(ids) {
+  selectedMemberIds.value = ids
 }
 
 // Reset everything when switching to a different group
@@ -306,17 +359,18 @@ async function toggleService(member) {
 // ── iMessage capability check ──────────────────────────────────────────────
 const checkingCapability = ref(false)
 const checkedCount       = ref(0)
+const checkableMembers   = computed(() => props.members.filter(m => m.type !== 'group_chat'))
 
 async function checkCapability() {
-  if (checkingCapability.value || !props.members.length) return
+  if (checkingCapability.value || !checkableMembers.value.length) return
   checkingCapability.value = true
   checkedCount.value = 0
   try {
     const timer = setInterval(() => {
-      if (checkedCount.value < props.members.length) checkedCount.value++
+      if (checkedCount.value < checkableMembers.value.length) checkedCount.value++
     }, 800)
     const results = await window.api.checkCapability(
-      props.members.map(m => ({ id: m.id, phone: m.phone, email: m.email || null }))
+      checkableMembers.value.map(m => ({ id: m.id, phone: m.phone, email: m.email || null }))
     )
     clearInterval(timer)
     emit('set-service')
@@ -343,6 +397,22 @@ async function checkCapability() {
 function onAdd(contactId) {
   emit('add-member', contactId)
   showAddModal.value = false
+}
+
+function onImported({ added }) {
+  showAddModal.value = false
+  emit('set-service')
+}
+
+function onAddChatGroup(chat) {
+  emit('add-group-chat', chat)
+  showAddChatGroupModal.value = false
+}
+
+// ── Tags ───────────────────────────────────────────────────────────────────
+async function removeTagFromMember(tagId, memberId) {
+  await window.api.removeTagFromMember(tagId, memberId)
+  emit('tags-changed')
 }
 
 // ── Delete ─────────────────────────────────────────────────────────────────
@@ -491,6 +561,17 @@ async function handleSchedule(info) {
 .group-title:hover .edit-hint { opacity: 1; }
 
 .name-editor { font-size: 22px; max-width: 440px; }
+.name-editor.at-limit { border-color: var(--error); }
+
+.char-counter {
+  font-size: 12px;
+  color: var(--text-2);
+  margin: 4px 0 0 0;
+  padding: 0;
+}
+.char-counter.at-limit {
+  color: var(--error);
+}
 
 .member-badge { font-size: 12px; color: var(--text-2); margin-top: 4px; }
 
@@ -537,9 +618,34 @@ async function handleSchedule(info) {
   flex-shrink: 0;
 }
 
+/* Uncapped flex:1 is load-bearing — it's what makes .member-info absorb all
+   leftover row space, which is what pins the service/remove buttons to a
+   consistent right-aligned position across every row. Tags get a consistent
+   display budget from MemberTagList's own internal maxWidth prop instead, so
+   this doesn't need to be capped for that. */
 .member-info { flex: 1; min-width: 0; }
 .member-name { font-size: 13px; font-weight: 500; }
 .member-sub  { font-size: 11px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.csv-label {
+  color: var(--text-2);
+  font-weight: 500;
+  margin-left: 4px;
+}
+
+.member-tags {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  /* Shrinks like a normal flex item (unlike the fixed-size service/remove
+     buttons after it) so it never rigidly claims space those need. overflow:
+     hidden makes this shrinkable down to 0 instead of refusing to shrink past
+     its content's natural width (the flexbox min-width:auto default) — actual
+     overflow handling (the "+N others" pill) lives in MemberTagList itself. */
+  flex-shrink: 1;
+  min-width: 26px;
+  overflow: hidden;
+}
 
 
 .btn-service {
