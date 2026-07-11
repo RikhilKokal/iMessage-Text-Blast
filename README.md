@@ -7,6 +7,9 @@ Send a templated message to dozens of contacts at once, schedule sends for later
 ## Features
 
 - **Groups & Contacts** — Sync your macOS Contacts, organize recipients into groups, and send to either individual contacts or whole groups.
+- **CSV Import** — Import contacts from a CSV file and add them to your contact list or directly into a group.
+- **Member Tags** — Organize members within a group using tags for quick filtering and selective sends.
+- **Group Chats** — Add existing iMessage group chats as members and send messages to entire group threads.
 - **Message Templates** — Save reusable message templates with personalization tokens (e.g. first name) and attachments.
 - **Live Preview** — See exactly what each recipient will receive before you send, including per-contact personalization.
 - **Scheduled Sends** — Schedule a message to go out at a future date/time, even if the app is closed (runs via a `launchd`-managed background process).
