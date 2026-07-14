@@ -24,7 +24,7 @@ if (!plistId) {
   process.exit(1)
 }
 
-const DB_PATH      = path.join(os.homedir(), 'Library', 'Application Support', 'iMessage Bulk Scheduler', 'app.db')
+const DB_PATH      = path.join(os.homedir(), 'Library', 'Application Support', 'iMessage Text Blast', 'app.db')
 const CHAT_DB_PATH = path.join(os.homedir(), 'Library', 'Messages', 'chat.db')
 
 // ── SQLite CLI helpers ────────────────────────────────────────────────────────
@@ -236,7 +236,7 @@ async function main() {
     console.log('[Helper] One-time send complete — marked inactive.')
     // Clean up stored attachment copies for one-time sends
     if (Array.isArray(attachmentPath)) {
-      const appAttachmentsDir = path.join(os.homedir(), 'Library', 'Application Support', 'iMessage Bulk Scheduler', 'attachments')
+      const appAttachmentsDir = path.join(os.homedir(), 'Library', 'Application Support', 'iMessage Text Blast', 'attachments')
       for (const p of attachmentPath) {
         if (p && p.startsWith(appAttachmentsDir)) {
           try { fs.unlinkSync(p) } catch (_) {}

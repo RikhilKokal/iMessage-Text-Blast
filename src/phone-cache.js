@@ -25,7 +25,7 @@ const os = require('os')
 
 const DB_PATH = path.join(
   os.homedir(),
-  'Library', 'Application Support', 'iMessage Bulk Scheduler', 'app.db'
+  'Library', 'Application Support', 'iMessage Text Blast', 'app.db'
 )
 
 const FAILURE_THRESHOLD = 2   // switch to SMS after this many consecutive failures

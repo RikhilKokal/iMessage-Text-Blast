@@ -8,7 +8,7 @@ const core = require('./sendCore')
 const { detectNodePath } = require('./nodePath')
 
 const CHAT_DB_PATH     = path.join(os.homedir(), 'Library', 'Messages', 'chat.db')
-const APP_DB_PATH      = path.join(os.homedir(), 'Library', 'Application Support', 'iMessage Bulk Scheduler', 'app.db')
+const APP_DB_PATH      = path.join(os.homedir(), 'Library', 'Application Support', 'iMessage Text Blast', 'app.db')
 const HELPER_SCRIPT    = path.join(__dirname, '../../buffer-send-helper.js').replace('/app.asar/', '/app.asar.unpacked/')
 
 function chatDbQuery(sql) {

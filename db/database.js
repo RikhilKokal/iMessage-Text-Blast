@@ -4,7 +4,7 @@ const os = require('os')
 const fs = require('fs')
 
 // Store DB path as a named constant so future prompts can reference it
-const DB_DIR = path.join(os.homedir(), 'Library', 'Application Support', 'iMessage Bulk Scheduler')
+const DB_DIR = path.join(os.homedir(), 'Library', 'Application Support', 'iMessage Text Blast')
 const DB_PATH = path.join(DB_DIR, 'app.db')
 
 let db

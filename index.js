@@ -17,6 +17,9 @@ const CH = require('./src/shared/ipcChannels')
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
+// Set app name for dock and menus
+app.name = 'iMessage Text Blast'
+
 let mainWindow = null
 let macNotifsEnabled = false
 
@@ -38,6 +41,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     titleBarStyle: 'hiddenInset', // macOS native feel
+    icon: path.join(__dirname, 'resources', 'icon.icns'), // use app icon
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -484,7 +488,7 @@ ipcMain.handle(CH.SYSTEM_OPEN_FDA_SETTINGS, () => {
 // ── Scheduling ────────────────────────────────────────────────────────────────
 
 const HELPER_SCRIPT_PATH   = path.join(__dirname, 'scheduled-send-helper.js').replace('/app.asar/', '/app.asar.unpacked/')
-const ATTACHMENTS_DIR      = path.join(os.homedir(), 'Library', 'Application Support', 'iMessage Bulk Scheduler', 'attachments')
+const ATTACHMENTS_DIR      = path.join(os.homedir(), 'Library', 'Application Support', 'iMessage Text Blast', 'attachments')
 
 function ensureAttachmentsDir() {
   if (!fs.existsSync(ATTACHMENTS_DIR)) fs.mkdirSync(ATTACHMENTS_DIR, { recursive: true })
