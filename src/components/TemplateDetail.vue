@@ -234,7 +234,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['deleted', 'updated', 'renamed', 'draft', 'saved'])
 
-const showToast = inject('addToast')
+const addToast = inject('addToast')
 
 // ── Local editable state ───────────────────────────────────────────────────
 const localName        = ref('')
@@ -290,7 +290,7 @@ async function doSave({ showFeedback = false } = {}) {
       const msg = /UNIQUE constraint failed|already exists/i.test(err.message)
         ? `A template named "${localName.value.trim()}" already exists. Please choose a different name.`
         : err.message
-      showToast('Save failed', msg, 'error')
+      addToast('Save failed', msg, 'error')
     }
     throw err
   } finally {
@@ -320,7 +320,7 @@ async function saveName() {
     const msg = /UNIQUE constraint failed|already exists/i.test(err.message)
       ? `A template named "${localName.value.trim()}" already exists. Please choose a different name.`
       : err.message
-    showToast('Rename failed', msg, 'error')
+    addToast('Rename failed', msg, 'error')
   }
 }
 
@@ -339,7 +339,7 @@ async function confirmDelete() {
     await window.api.deleteTemplate(props.template.id)
     emit('deleted')
   } catch (err) {
-    showToast('Delete failed', err.message, 'error')
+    addToast('Delete failed', err.message, 'error')
   }
 }
 
@@ -486,35 +486,35 @@ async function sendNow() {
       const result = await window.api.templateSend(props.template.id, 'contacts', ids, delaySeconds)
       if (result.failed === 0) {
         if (result.buffered) {
-          showToast('Messages are delivering', 'Messages have started delivering and will continue to deliver with the buffer delay.', 'success', 7000)
+          addToast('Messages are delivering', 'Messages have started delivering and will continue to deliver with the buffer delay.', 'success', 7000)
         } else {
-          showToast(`Sent to ${result.succeeded} ${result.succeeded === 1 ? 'person' : 'people'}`, '', 'success')
+          addToast(`Sent to ${result.succeeded} ${result.succeeded === 1 ? 'person' : 'people'}`, '', 'success')
         }
         selectedContactIds.value = new Set()
         contactSearch.value = ''
       } else if (result.succeeded === 0) {
-        showToast('Send failed', 'Could not reach any recipients.', 'error')
+        addToast('Send failed', 'Could not reach any recipients.', 'error')
       } else {
-        showToast(`Sent ${result.succeeded}, failed ${result.failed}`, '', 'error')
+        addToast(`Sent ${result.succeeded}, failed ${result.failed}`, '', 'error')
       }
     } else {
       const result = await window.api.templateSend(props.template.id, 'groups', groupIds, delaySeconds)
       if (result.buffered) {
-        showToast('Messages are delivering', 'Messages have started delivering and will continue to deliver with the buffer delay.', 'success', 7000)
+        addToast('Messages are delivering', 'Messages have started delivering and will continue to deliver with the buffer delay.', 'success', 7000)
         selectedGroupIds.value = []
       } else {
         const total = result.results.reduce((sum, r) => sum + r.succeeded, 0)
         const failed = result.results.reduce((sum, r) => sum + r.failed, 0)
         if (failed === 0) {
-          showToast(`Sent to ${result.results.length} ${result.results.length === 1 ? 'group' : 'groups'}`, `${total} messages delivered.`, 'success')
+          addToast(`Sent to ${result.results.length} ${result.results.length === 1 ? 'group' : 'groups'}`, `${total} messages delivered.`, 'success')
           selectedGroupIds.value = []
         } else {
-          showToast(`Sent with errors`, `${total} delivered, ${failed} failed.`, 'error')
+          addToast(`Sent with errors`, `${total} delivered, ${failed} failed.`, 'error')
         }
       }
     }
   } catch (err) {
-    showToast('Send failed', err.message, 'error')
+    addToast('Send failed', err.message, 'error')
   } finally {
     window.api.offSendProgress()
     sendProgress.value = null

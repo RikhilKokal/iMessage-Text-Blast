@@ -166,23 +166,15 @@ async function importSelected() {
 }
 
 .btn-close {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
+  background: none;
   border: none;
-  background: var(--bg);
+  font-size: 14px;
   color: var(--text-2);
-  font-size: 18px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
 }
-
-.btn-close:hover {
-  background: var(--border);
-}
+.btn-close:hover { background: var(--bg); color: var(--text); }
 
 .import-content {
   flex: 1;

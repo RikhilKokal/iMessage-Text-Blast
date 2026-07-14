@@ -41,6 +41,11 @@ function chatDbQuery(sql) {
   return dbSelect(sql, CHAT_DB_PATH)
 }
 
+// Adapter: appDbQuery for sendCore — uses the sqlite3 CLI against app.db
+function appDbQuery(sql) {
+  return dbSelect(sql, DB_PATH)
+}
+
 // ── sendCore ──────────────────────────────────────────────────────────────────
 
 const core = require('./src/services/sendCore')
@@ -157,11 +162,32 @@ async function main() {
     }
   }
 
-  // 4. Send — sendCore handles Messages.app launch, template rendering, polling, SMS fallback
-  const delaySeconds = Number(delaySecondsRaw) || 0
-  const { succeeded, failed } = await core.sendToGroup(members, templateText, chatDbQuery, { attachmentPath: attachmentPath || null, delaySeconds })
+  // 4. Fetch persistent token overrides for contact members
+  const memberOverrides = new Map()
+  for (const member of members) {
+    if (member.type !== 'group_chat') {
+      const overrideRows = dbSelect(
+        `SELECT overrides FROM contact_token_overrides WHERE contact_id = ${member.id} LIMIT 1`,
+        DB_PATH
+      )
+      if (overrideRows.length > 0) {
+        try {
+          const overrides = JSON.parse(overrideRows[0][0])
+          if (Object.keys(overrides).length > 0) {
+            memberOverrides.set(member.id, overrides)
+          }
+        } catch (err) {
+          console.warn(`[Helper] Failed to parse overrides for contact ${member.id}: ${err.message}`)
+        }
+      }
+    }
+  }
 
-  // 5. Persist preferred_service=SMS for auto-routed contacts
+  // 5. Send — sendCore handles Messages.app launch, template rendering, polling, SMS fallback
+  const delaySeconds = Number(delaySecondsRaw) || 0
+  const { succeeded, failed } = await core.sendToGroup(members, templateText, chatDbQuery, { attachmentPath: attachmentPath || null, delaySeconds, memberOverrides, appDbQuery })
+
+  // 6. Persist preferred_service=SMS for auto-routed contacts
   for (const s of succeeded) {
     if (s.autoRouted) {
       dbExec(`UPDATE contacts SET preferred_service = 'SMS', service_confirmed = 1 WHERE id = ${s.id};`)
@@ -169,7 +195,7 @@ async function main() {
     }
   }
 
-  // 6. Write send_history + recipients in one DB round-trip using shared SQL builder
+  // 7. Write send_history + recipients in one DB round-trip using shared SQL builder
   const historySql = core.buildSendHistorySQL({
     groupId,
     templateText,

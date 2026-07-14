@@ -24,7 +24,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue'])
 
-const showToast = inject('addToast', () => {})
+const addToast = inject('addToast', () => {})
 
 async function pick() {
   const remaining = props.maxAttachments - props.modelValue.length
@@ -33,7 +33,7 @@ async function pick() {
   if (!filePaths?.length) return
   const combined = [...props.modelValue, ...filePaths]
   if (combined.length > props.maxAttachments) {
-    showToast(`Max ${props.maxAttachments} files`, `Only the first ${props.maxAttachments} selected files were added.`, 'error', 4000)
+    addToast(`Max ${props.maxAttachments} files`, `Only the first ${props.maxAttachments} selected files were added.`, 'error', 4000)
   }
   emit('update:modelValue', combined.slice(0, props.maxAttachments))
 }

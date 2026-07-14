@@ -413,17 +413,106 @@ async function sendMessageToChat(chatIdentifier, message, attachmentPaths = null
 
 // ── Template renderer ─────────────────────────────────────────────────────────
 
-function renderTemplate(template, contact) {
-  const firstName = (contact.name || '').split(' ')[0]
-  const lastName  = (contact.name || '').split(' ').slice(1).join(' ')
+
+function resolveChatParticipants(appDbQuery, chatIdentifier) {
+  try {
+    // Query chat_group_members to get participant_handles
+    const row = appDbQuery(`SELECT participant_handles FROM chat_group_members WHERE chat_identifier = '${chatIdentifier.replace(/'/g, "''")}'`)
+    if (row.length === 0) return { firstNames: [], lastNames: [], fullNames: [] }
+
+    const participantHandlesJson = row[0][0]
+    const handles = JSON.parse(participantHandlesJson || '[]')
+    const participants = handles.map(handle => {
+      // Try to find contact by phone or email
+      let contact = null
+      const digits = handle.replace(/\D/g, '')
+      if (digits.length >= 10) {
+        const suffix = digits.slice(-10)
+        const contactRow = appDbQuery(`SELECT name FROM contacts WHERE normalized_phone LIKE '%${suffix}' LIMIT 1`)
+        if (contactRow.length > 0) contact = contactRow[0][0]
+      } else if (handle.includes('@')) {
+        const contactRow = appDbQuery(`SELECT name FROM contacts WHERE LOWER(email) = LOWER('${handle.replace(/'/g, "''")}') LIMIT 1`)
+        if (contactRow.length > 0) contact = contactRow[0][0]
+      }
+
+      const nameInfo = extractMemberName(contact || handle)
+      return {
+        firstName: nameInfo.firstName,
+        lastName: nameInfo.lastName,
+        fullName: contact || handle
+      }
+    })
+
+    return {
+      firstNames: participants.map(p => p.firstName).sort(),
+      lastNames: participants.map(p => p.lastName).sort(),
+      fullNames: participants.map(p => p.fullName).sort()
+    }
+  } catch (err) {
+    console.error(`[renderTemplate] Failed to resolve chat participants for ${chatIdentifier}: ${err.message}`)
+    return { firstNames: [], lastNames: [], fullNames: [] }
+  }
+}
+
+function formatMemberList(names) {
+  if (names.length === 0) return ''
+  if (names.length === 1) return names[0]
+  if (names.length === 2) return `${names[0]} and ${names[1]}`
+  return names.slice(0, -1).join(', ') + ', and ' + names[names.length - 1]
+}
+
+function extractMemberName(fullName) {
+  if (!fullName) return { firstName: '', lastName: '' }
+  const parts = fullName.trim().split(' ')
+  return {
+    firstName: parts[0] || '',
+    lastName: parts.slice(1).join(' ') || ''
+  }
+}
+
+function renderTemplate(template, contact, overrides = {}, emptyDefaults = {}) {
+  let firstName, lastName, fullName
+
+  if (contact.type === 'group_chat' && contact.participants) {
+    firstName = formatMemberList(contact.participants.firstNames)
+    lastName = formatMemberList(contact.participants.lastNames)
+    fullName = formatMemberList(contact.participants.fullNames)
+  } else {
+    firstName = (contact.name || '').split(' ')[0]
+    lastName = (contact.name || '').split(' ').slice(1).join(' ')
+    fullName = contact.name || ''
+  }
+
+  function resolveToken(tokenKey, contactValue, isFieldEmpty) {
+    if (overrides[tokenKey] !== undefined) {
+      return overrides[tokenKey]
+    }
+    if (isFieldEmpty && emptyDefaults[tokenKey] !== undefined) {
+      return emptyDefaults[tokenKey]
+    }
+    return contactValue
+  }
+
+  const tokens = {
+    firstName: resolveToken('firstName', firstName, !firstName),
+    lastName:  resolveToken('lastName', lastName, !lastName),
+    fullName:  resolveToken('fullName', fullName, !fullName),
+    email:     resolveToken('email', contact.email || '(no email)', !contact.email),
+    phone:     resolveToken('phone', contact.type === 'group_chat' ? '(group chat)' : (contact.phone || '(no phone)'), !contact.phone || contact.type === 'group_chat'),
+    company:   resolveToken('company', contact.company || '(no company)', !contact.company),
+    nickname:  contact.type === 'group_chat'
+      ? resolveToken('nickname', contact.nickname || contact.name || '', !contact.nickname)
+      : resolveToken('nickname', contact.nickname || firstName, !contact.nickname),
+  }
+
   return template
-    .replace(/⟦firstName⟧/g, firstName)
-    .replace(/⟦lastName⟧/g,  lastName)
-    .replace(/⟦fullName⟧/g,  contact.name     || '')
-    .replace(/⟦email⟧/g,     contact.email    || '')
-    .replace(/⟦phone⟧/g,     contact.type === 'group_chat' ? '' : (contact.phone || ''))
-    .replace(/⟦company⟧/g,   contact.company  || '')
-    .replace(/⟦nickname⟧/g,  contact.nickname || firstName)
+    .replace(/⟦firstName⟧/g, tokens.firstName)
+    .replace(/⟦lastName⟧/g,  tokens.lastName)
+    .replace(/⟦fullName⟧/g,  tokens.fullName)
+    .replace(/⟦email⟧/g,     tokens.email)
+    .replace(/⟦phone⟧/g,     tokens.phone)
+    .replace(/⟦company⟧/g,   tokens.company)
+    .replace(/⟦nickname⟧/g,  tokens.nickname)
 }
 
 // ── Buffered bulk send sentinel path ─────────────────────────────────────────
@@ -439,15 +528,28 @@ const BUFFER_DONE_PATH = path.join(os.homedir(), '.imsg-buffer-done.json')
  * @param {object}   [opts]
  * @param {Function} [opts.onProgress]   — callback({ sent, failed, total, name, via })
  * @param {number}   [opts.delaySeconds] — seconds between each message (0 = no delay)
+ * @param {Map}      [opts.memberOverrides] — Map of contactId → token overrides object
+ * @param {object}   [opts.emptyDefaults] — token defaults for contacts with empty fields
+ * @param {Function} [opts.appDbQuery] — optional app database access for resolving group chat participants
  */
-async function sendToGroup(members, templateText, chatDbQuery, { onProgress, attachmentPath, delaySeconds = 0 } = {}) {
+async function sendToGroup(members, templateText, chatDbQuery, { onProgress, attachmentPath, delaySeconds = 0, memberOverrides = new Map(), emptyDefaults = {}, appDbQuery } = {}) {
   const succeeded = []
   const failed    = []
   const total     = members.length
 
   for (let i = 0; i < members.length; i++) {
-    const member  = members[i]
-    const message = renderTemplate(templateText, member)
+    let member  = members[i]
+
+    // Pre-resolve group chat participants for token rendering
+    if (member.type === 'group_chat' && member.chat_identifier && !member.participants && appDbQuery) {
+      member = {
+        ...member,
+        participants: resolveChatParticipants(appDbQuery, member.chat_identifier)
+      }
+    }
+
+    const overrides = memberOverrides.get(member.id) || {}
+    const message = renderTemplate(templateText, member, overrides, emptyDefaults)
     const result  = member.type === 'group_chat'
       ? await sendMessageToChat(member.chat_identifier, message, attachmentPath)
       : await sendMessage(member.phone, message, member.service === 'SMS' ? 'SMS' : 'iMessage', chatDbQuery, attachmentPath)

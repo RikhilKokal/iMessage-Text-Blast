@@ -223,14 +223,12 @@ function statusLabel(status) {
   width: 28px; height: 28px;
   border-radius: 50%;
   border: none;
-  background: #ffcccc;
-  font-size: 14px;
+  background: transparent;
+  color: var(--text-2); font-size: 16px;
   display: flex; align-items: center; justify-content: center;
-  padding: 0; cursor: pointer; flex-shrink: 0;
-  color: var(--danger);
+  flex-shrink: 0; padding: 0;
 }
-.btn-trash:hover { background: var(--danger); }
-.btn-trash:hover .trash-icon { filter: brightness(0) invert(1); }
+.btn-trash:hover { background: var(--error-tint); color: var(--danger); }
 
 .confirm-overlay {
   position: fixed;

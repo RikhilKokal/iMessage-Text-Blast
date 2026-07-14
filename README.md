@@ -11,6 +11,7 @@ Send a templated message to dozens of contacts at once, schedule sends for later
 - **Member Tags** — Organize members within a group using tags for quick filtering and selective sends.
 - **Group Chats** — Add existing iMessage group chats as members and send messages to entire group threads.
 - **Message Templates** — Save reusable message templates with personalization tokens (e.g. first name) and attachments.
+- **Token Overrides** — Customize how personalization tokens are substituted on a per-contact basis for flexible messaging.
 - **Live Preview** — See exactly what each recipient will receive before you send, including per-contact personalization.
 - **Scheduled Sends** — Schedule a message to go out at a future date/time, even if the app is closed (runs via a `launchd`-managed background process).
 - **Send Buffer** — Add a delay (1–60s) between each message in a bulk send so they deliver gradually instead of all at once.

@@ -179,6 +179,26 @@ function createTables() {
       PRIMARY KEY (tag_id, member_id)
     );
   `)
+
+  // Contact-level personalization token overrides. JSON format: {"firstName": "Abhi", "lastName": "K", ...}
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS contact_token_overrides (
+      contact_id INTEGER NOT NULL PRIMARY KEY REFERENCES contacts(id) ON DELETE CASCADE,
+      overrides TEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `)
+
+  // Default token overrides for contacts with empty values (e.g., no email).
+  // Single row containing overrides that apply to all contacts with empty fields.
+  // JSON format: {"firstName": "Abhi", "lastName": "K", ...}
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS empty_value_defaults (
+      id INTEGER PRIMARY KEY,
+      overrides TEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `)
 }
 
 // Strip everything except digits, then remove a leading country code 1
@@ -225,6 +245,29 @@ function resolveChatGroupLabel(displayName, participantHandlesJson) {
   if (displayName && displayName.trim()) return displayName.trim()
   const handles = JSON.parse(participantHandlesJson || '[]')
   return handles.map(resolveHandleName).join(', ') || 'Group Chat'
+}
+
+function resolveGroupChatParticipants(participantHandlesJson) {
+  try {
+    const handles = JSON.parse(participantHandlesJson || '[]')
+    const participants = handles.map(handle => {
+      const row = _lookupContactByHandle(handle)
+      const name = row ? row.name : handle
+      const parts = name.trim().split(' ')
+      return {
+        firstName: parts[0] || '',
+        lastName: parts.slice(1).join(' ') || '',
+        fullName: name
+      }
+    })
+    return {
+      firstNames: participants.map(p => p.firstName).filter(Boolean).sort(),
+      lastNames: participants.map(p => p.lastName).filter(Boolean).sort(),
+      fullNames: participants.map(p => p.fullName).sort()
+    }
+  } catch {
+    return { firstNames: [], lastNames: [], fullNames: [] }
+  }
 }
 
 function contactExists(phone) {
@@ -513,6 +556,7 @@ function getGroupMembers(groupId) {
     type: 'group_chat',
     chat_identifier: row.chat_identifier,
     participant_count: JSON.parse(row.participant_handles || '[]').length,
+    participants: resolveGroupChatParticipants(row.participant_handles),
   })).sort((a, b) => a.name.localeCompare(b.name))
 
   // Attach each member's tags via one query for the whole group, not per-member.
@@ -827,6 +871,44 @@ function getContactsByIdsAsMember(ids) {
   ).all(ids)
 }
 
+// ── Token Overrides ────────────────────────────────────────────────────────────
+
+function getContactTokenOverrides(contactId) {
+  const row = db.prepare('SELECT overrides FROM contact_token_overrides WHERE contact_id = ?').get(contactId)
+  return row ? JSON.parse(row.overrides) : {}
+}
+
+function saveContactTokenOverrides(contactId, overridesObj) {
+  const overridesJson = JSON.stringify(overridesObj)
+  db.prepare(`
+    INSERT INTO contact_token_overrides (contact_id, overrides)
+    VALUES (?, ?)
+    ON CONFLICT(contact_id) DO UPDATE SET overrides = excluded.overrides, updated_at = CURRENT_TIMESTAMP
+  `).run(contactId, overridesJson)
+}
+
+function deleteContactTokenOverrides(contactId) {
+  db.prepare('DELETE FROM contact_token_overrides WHERE contact_id = ?').run(contactId)
+}
+
+function getEmptyValueDefaults() {
+  const row = db.prepare('SELECT overrides FROM empty_value_defaults LIMIT 1').get()
+  return row ? JSON.parse(row.overrides) : {}
+}
+
+function saveEmptyValueDefaults(overridesObj) {
+  const overridesJson = JSON.stringify(overridesObj)
+  db.prepare(`
+    INSERT INTO empty_value_defaults (id, overrides)
+    VALUES (1, ?)
+    ON CONFLICT(id) DO UPDATE SET overrides = excluded.overrides, updated_at = CURRENT_TIMESTAMP
+  `).run(overridesJson)
+}
+
+function deleteEmptyValueDefaults() {
+  db.prepare('DELETE FROM empty_value_defaults').run()
+}
+
 module.exports = {
   init,
   // Contacts
@@ -839,6 +921,9 @@ module.exports = {
   addChatGroupToGroup, removeChatGroupFromGroup, resolveHandleName, resolveHandleInfo, syncChatGroupsFromLive,
   // Tags
   createTag, getTagsForGroup, renameTag, deleteTag, addTagToMember, removeTagFromMember, setTagMembers,
+  // Token overrides
+  getContactTokenOverrides, saveContactTokenOverrides, deleteContactTokenOverrides,
+  getEmptyValueDefaults, saveEmptyValueDefaults, deleteEmptyValueDefaults,
   // Send history
   logSendAttempt, logSendRecipients, updateSendStatus, getSendHistory, getSendRecipients, clearSendHistory,
   // Scheduled sends

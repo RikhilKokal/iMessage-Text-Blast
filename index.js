@@ -189,6 +189,18 @@ ipcMain.handle(CH.TAG_ADD_TO_MEMBER, (_e, tagId, memberId) => { db.addTagToMembe
 ipcMain.handle(CH.TAG_REMOVE_FROM_MEMBER, (_e, tagId, memberId) => { db.removeTagFromMember(tagId, memberId); return true })
 ipcMain.handle(CH.TAG_SET_MEMBERS, (_e, tagId, memberIds) => { db.setTagMembers(tagId, memberIds); return true })
 
+// ── Token Overrides ───────────────────────────────────────────────────────────
+
+ipcMain.handle(CH.CONTACT_GET_TOKEN_OVERRIDES, (_e, contactId) => db.getContactTokenOverrides(contactId))
+ipcMain.handle(CH.CONTACT_SAVE_TOKEN_OVERRIDES, (_e, contactId, overrides) => db.saveContactTokenOverrides(contactId, overrides))
+ipcMain.handle(CH.CONTACT_DELETE_TOKEN_OVERRIDES, (_e, contactId) => db.deleteContactTokenOverrides(contactId))
+
+// ── Empty Value Defaults ──────────────────────────────────────────────────────
+
+ipcMain.handle(CH.EMPTY_DEFAULTS_GET_TOKEN_OVERRIDES, (_e) => db.getEmptyValueDefaults())
+ipcMain.handle(CH.EMPTY_DEFAULTS_SAVE_TOKEN_OVERRIDES, (_e, overrides) => db.saveEmptyValueDefaults(overrides))
+ipcMain.handle(CH.EMPTY_DEFAULTS_DELETE_TOKEN_OVERRIDES, (_e) => db.deleteEmptyValueDefaults())
+
 // ── iMessage capability check ─────────────────────────────────────────────────
 
 const CHAT_DB_PATH = path.join(os.homedir(), 'Library', 'Messages', 'chat.db')
@@ -271,6 +283,20 @@ ipcMain.handle(CH.SEND_TO_GROUP, async (event, groupId, templateText, memberIds,
   }
   if (!members.length) return { succeeded: 0, failed: 0, errors: [] }
 
+  // Fetch persistent token overrides for all contact members
+  const memberOverrides = new Map()
+  for (const member of members) {
+    if (member.type !== 'group_chat') {
+      const overrides = db.getContactTokenOverrides(member.id)
+      if (Object.keys(overrides).length > 0) {
+        memberOverrides.set(member.id, overrides)
+      }
+    }
+  }
+
+  // Fetch empty value defaults
+  const emptyDefaults = db.getEmptyValueDefaults()
+
   // Log a pending attempt before sending, then snapshot the recipient list
   const { id: historyId } = db.logSendAttempt(groupId, templateText, 'pending', null, allMembers.length, attachmentPath || null)
   db.logSendRecipients(historyId, members, allMembers)
@@ -285,6 +311,8 @@ ipcMain.handle(CH.SEND_TO_GROUP, async (event, groupId, templateText, memberIds,
     },
     attachmentPath || null,
     delaySeconds,
+    memberOverrides,
+    emptyDefaults,
   )
 
   // Buffered sends run in a detached helper process — log optimistically and return early

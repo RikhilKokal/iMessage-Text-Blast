@@ -38,6 +38,7 @@ module.exports = {
   DB_REFRESH_CHAT_GROUPS:          'db:refreshChatGroups',
   DB_ADD_CHAT_GROUP_TO_GROUP:      'db:addChatGroupToGroup',
   DB_REMOVE_CHAT_GROUP_FROM_GROUP: 'db:removeChatGroupFromGroup',
+  DB_RESOLVE_CHAT_PARTICIPANTS:    'db:resolveChatParticipants',
 
   // Database — tags
   TAG_GET_ALL_FOR_GROUP:   'tag:getAllForGroup',
@@ -47,6 +48,16 @@ module.exports = {
   TAG_ADD_TO_MEMBER:       'tag:addToMember',
   TAG_REMOVE_FROM_MEMBER:  'tag:removeFromMember',
   TAG_SET_MEMBERS:         'tag:setMembers',
+
+  // Database — token overrides
+  CONTACT_GET_TOKEN_OVERRIDES:    'contact:getTokenOverrides',
+  CONTACT_SAVE_TOKEN_OVERRIDES:   'contact:saveTokenOverrides',
+  CONTACT_DELETE_TOKEN_OVERRIDES: 'contact:deleteTokenOverrides',
+
+  // Database — empty value defaults (defaults for contacts with empty fields)
+  EMPTY_DEFAULTS_GET_TOKEN_OVERRIDES:    'emptyDefaults:getTokenOverrides',
+  EMPTY_DEFAULTS_SAVE_TOKEN_OVERRIDES:   'emptyDefaults:saveTokenOverrides',
+  EMPTY_DEFAULTS_DELETE_TOKEN_OVERRIDES: 'emptyDefaults:deleteTokenOverrides',
 
   // File dialogs
   DIALOG_OPEN_FILE:       'dialog:openFile',

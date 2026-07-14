@@ -42,6 +42,10 @@ function chatDbQuery(sql) {
   return dbSelect(sql, CHAT_DB_PATH)
 }
 
+function appDbQuery(sql) {
+  return dbSelect(sql, APP_DB_PATH)
+}
+
 // ── sendCore ──────────────────────────────────────────────────────────────────
 
 const core = require('./src/services/sendCore')
@@ -59,13 +63,16 @@ async function main() {
   }
   try { fs.unlinkSync(payloadPath) } catch (_) {}
 
-  const { members, templateText, delaySeconds, attachmentPath } = payload
+  const { members, templateText, delaySeconds, attachmentPath, memberOverrides: overridesArray = [], emptyDefaults = {} } = payload
+
+  // Reconstruct Map from serialized entries
+  const memberOverrides = new Map(overridesArray)
 
   console.log(`[BufferHelper] Sending to ${members.length} recipients with ${delaySeconds}s delay`)
 
   const { succeeded, failed } = await core.sendToGroup(
     members, templateText, chatDbQuery,
-    { attachmentPath: attachmentPath || null, delaySeconds }
+    { attachmentPath: attachmentPath || null, delaySeconds, memberOverrides, emptyDefaults, appDbQuery }
   )
 
   console.log(`[BufferHelper] Done — succeeded: ${succeeded.length}, failed: ${failed.length}`)

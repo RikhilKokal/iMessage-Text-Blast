@@ -96,6 +96,8 @@
       <section class="card">
         <div class="card-header">
           <h2>Message Template</h2>
+          <button class="btn-override" @click="showTokenOverridesModal = true">⚙️</button>
+
         </div>
 
         <TokenEditor
@@ -122,6 +124,8 @@
           v-if="template.trim() && selectedMembers.length > 0"
           :template="template"
           :contacts="selectedMembers"
+          :member-overrides="memberTokenOverrides"
+          :empty-defaults="emptyValueDefaults"
         />
         <div v-else class="preview-placeholder">
           {{ !template.trim() ? 'Type a message above to see a live preview.' : 'Add members to see a preview.' }}
@@ -194,6 +198,14 @@
       @changed="$emit('tags-changed')"
     />
 
+    <EditTokenOverridesModal
+      v-if="showTokenOverridesModal"
+      :contacts="allMembers"
+      :member-overrides="memberTokenOverrides"
+      @close="showTokenOverridesModal = false"
+      @saved="() => { loadMemberTokenOverrides(); loadEmptyValueDefaults(); }"
+    />
+
     <ScheduleModal
       v-if="showScheduleModal"
       :initialUseBuffer="useBuffer"
@@ -220,6 +232,7 @@ import { ref, computed, watch, nextTick, inject, onMounted, onUnmounted } from '
 import AddMemberModal      from './AddMemberModal.vue'
 import AddGroupChatModal   from './AddGroupChatModal.vue'
 import EditTagsModal       from './EditTagsModal.vue'
+import EditTokenOverridesModal from './EditTokenOverridesModal.vue'
 import MemberTagPicker     from './MemberTagPicker.vue'
 import MemberTagList       from './MemberTagList.vue'
 import SelectByTagDropdown from './SelectByTagDropdown.vue'
@@ -252,6 +265,9 @@ const showAddChatGroupModal = ref(false)
 const showEditTagsModal = ref(false)
 const showDeleteDialog = ref(false)
 const showScheduleModal = ref(false)
+const showTokenOverridesModal = ref(false)
+const memberTokenOverrides = ref(new Map())
+const emptyValueDefaults = ref({})
 
 function onKeydown(e) {
   if (e.key !== 'Escape') return
@@ -261,6 +277,7 @@ function onKeydown(e) {
   if (showAddModal.value)      { showAddModal.value = false; return }
   if (showAddChatGroupModal.value) { showAddChatGroupModal.value = false; return }
   if (showEditTagsModal.value) { showEditTagsModal.value = false; return }
+  if (showTokenOverridesModal.value) { showTokenOverridesModal.value = false; return }
 }
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
@@ -274,6 +291,7 @@ const useBuffer          = ref(false)
 const bufferSeconds      = ref(5)
 
 // ── Computed ───────────────────────────────────────────────────────────────
+const allMembers = computed(() => props.members)
 const selectedMembers = computed(() => props.members.filter(m => selectedMemberIds.value.has(m.id)))
 const allSelected     = computed(() => props.members.length > 0 && props.members.every(m => selectedMemberIds.value.has(m.id)))
 const canSend         = computed(() => (template.value.trim().length > 0 || attachmentPaths.value.length > 0) && selectedMembers.value.length > 0)
@@ -302,6 +320,32 @@ watch(() => props.group.id, () => {
   knownMemberIds.value    = new Set(ids)
 })
 
+// Load token overrides for all members
+async function loadMemberTokenOverrides() {
+  const overrides = new Map()
+  for (const member of props.members) {
+    try {
+      const memberOverrides = await window.api.getContactTokenOverrides(member.id)
+      if (Object.keys(memberOverrides).length > 0) {
+        overrides.set(member.id, memberOverrides)
+      }
+    } catch (err) {
+      console.warn(`Failed to load token overrides for member ${member.id}:`, err)
+    }
+  }
+  memberTokenOverrides.value = overrides
+}
+
+// Load empty value defaults
+async function loadEmptyValueDefaults() {
+  try {
+    const defaults = await window.api.getEmptyValueDefaults()
+    emptyValueDefaults.value = defaults
+  } catch (err) {
+    console.warn('Failed to load empty value defaults:', err)
+  }
+}
+
 // When members reload, only auto-check genuinely new members; preserve existing checked/unchecked state
 watch(() => props.members, (members) => {
   const selected = new Set(selectedMemberIds.value)
@@ -321,6 +365,10 @@ watch(() => props.members, (members) => {
   }
   selectedMemberIds.value = selected
   knownMemberIds.value    = known
+
+  // Load token overrides for all members and empty value defaults
+  loadMemberTokenOverrides()
+  loadEmptyValueDefaults()
 }, { immediate: true })
 
 
@@ -383,10 +431,10 @@ async function checkCapability() {
     if (imsg)    parts.push(`${imsg} iMessage`)
     if (sms)     parts.push(`${sms} SMS`)
     if (unknown.length) parts.push(`${unknown.length} unknown (no prior history)`)
-    showToast('Capability check complete', parts.join(', '), 'info')
+    addToast('Capability check complete', parts.join(', '), 'info')
   } catch (err) {
     console.error('[Check] error:', err)
-    showToast('Check failed', err.message, 'error')
+    addToast('Check failed', err.message, 'error')
   } finally {
     checkingCapability.value = false
     checkedCount.value = 0
@@ -422,7 +470,7 @@ function confirmDelete() {
 }
 
 // ── Toast helpers ──────────────────────────────────────────────────────────
-const showToast = inject('addToast')
+const addToast = inject('addToast')
 
 
 // ── Unknown warning ────────────────────────────────────────────────────────
@@ -459,27 +507,27 @@ async function sendNow() {
       template.value = ''
       attachmentPaths.value = []
       if (result.buffered) {
-        showToast('Messages are delivering', 'Messages have started delivering and will continue to deliver with the buffer delay.', 'success', 7000)
+        addToast('Messages are delivering', 'Messages have started delivering and will continue to deliver with the buffer delay.', 'success', 7000)
       } else {
-        showToast(`Sent to ${result.succeeded} ${result.succeeded === 1 ? 'person' : 'people'}`, '', 'success')
+        addToast(`Sent to ${result.succeeded} ${result.succeeded === 1 ? 'person' : 'people'}`, '', 'success')
       }
     } else if (result.succeeded === 0) {
-      showToast('Send failed', 'Could not reach any recipients. Check that Messages has permission.', 'error')
+      addToast('Send failed', 'Could not reach any recipients. Check that Messages has permission.', 'error')
     } else {
-      showToast(`Sent ${result.succeeded}, failed ${result.failed}`, result.errors.join('\n'), 'error')
+      addToast(`Sent ${result.succeeded}, failed ${result.failed}`, result.errors.join('\n'), 'error')
     }
 
     // Auto-routing notification — shown as a second toast stacked above the summary
     if (result.autoRouted?.length) {
       const noun = result.autoRouted.length === 1 ? 'contact' : 'contacts'
-      showToast(
+      addToast(
         `${result.autoRouted.length} ${noun} switched to SMS`,
         `${result.autoRouted.join(', ')} — iMessage failed, sent as SMS instead. Future sends will use SMS automatically.`,
         'info', 7000
       )
     }
   } catch (err) {
-    showToast('Error', err.message, 'error')
+    addToast('Error', err.message, 'error')
   } finally {
     window.api.offSendProgress()
     sendProgress.value = null
@@ -509,14 +557,14 @@ async function handleSchedule(info) {
     showScheduleModal.value = false
     template.value = ''
     attachmentPaths.value = []
-    showToast(
+    addToast(
       'Scheduled',
       `Message scheduled for ${new Date(result.nextRun).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`,
       'success',
     )
   } catch (err) {
     console.error('[Schedule] Error:', err)
-    showToast('Schedule Failed', err.message, 'error')
+    addToast('Schedule Failed', err.message, 'error')
   } finally {
     isSending.value = false
   }
@@ -663,6 +711,17 @@ async function handleSchedule(info) {
 .btn-service.imessage { background: var(--accent-tint); color: var(--accent-tint-text); border-color: var(--accent-tint-border); }
 .btn-service.sms      { background: var(--success-tint); color: var(--success-tint-text); border-color: var(--success-tint-border, #a5d6a7); }
 .btn-service.unknown  { background: var(--bg); color: var(--text-2); border-color: var(--border); }
+
+.btn-override {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 50%;
+}
+.btn-override:hover { background: var(--border); }
 
 .card-header-right {
   display: flex;

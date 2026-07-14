@@ -304,7 +304,7 @@ async function createNewTemplate() {
     await loadTemplates()
     selectTemplate(id)
   } catch (err) {
-    showToast(err.message, 'error')
+    showPillNotification(err.message, 'error')
   }
 }
 
@@ -315,7 +315,7 @@ async function onTemplateDeleted() {
 
 async function onTemplateRenamed() {
   await loadTemplates()
-  showToast('Template renamed.')
+  showPillNotification('Template renamed.')
 }
 
 const templateDrafts = ref({})
@@ -330,7 +330,7 @@ function onTemplateSaved(id) {
 }
 
 let toastTimer = null
-function showToast(message, type = 'success') {
+function showPillNotification(message, type = 'success') {
   toast.value = { message, type }
   clearTimeout(toastTimer)
   toastTimer = setTimeout(() => { toast.value = { message: '', type: 'success' } }, 3500)
@@ -359,12 +359,12 @@ async function createGroup(name) {
     await loadGroups()
     const created = groups.value.find((g) => g.name === name)
     if (created) await selectGroup(created.id)
-    showToast(`Group "${name}" created.`)
+    showPillNotification(`Group "${name}" created.`)
   } catch (err) {
     if (/unique|already exists/i.test(err.message)) {
       createGroupError.value = `A group named "${name}" already exists. Please choose a different name.`
     } else {
-      showToast(err.message, 'error')
+      showPillNotification(err.message, 'error')
     }
   }
 }
@@ -373,7 +373,7 @@ async function updateGroupName(newName) {
   try {
     await window.api.updateGroupName(selectedGroupId.value, newName)
     await loadGroups()
-    showToast('Group renamed.')
+    showPillNotification('Group renamed.')
   } catch (err) {
     const msg = /UNIQUE constraint failed|already exists/i.test(err.message)
       ? `A group named "${newName}" already exists. Please choose a different name.`
@@ -390,9 +390,9 @@ async function deleteGroup() {
     selectedGroupId.value = null
     groupMembers.value = []
     await loadGroups()
-    showToast(`Group "${name}" deleted.`)
+    showPillNotification(`Group "${name}" deleted.`)
   } catch (err) {
-    showToast(err.message, 'error')
+    showPillNotification(err.message, 'error')
   }
 }
 
@@ -404,7 +404,7 @@ const scheduledSyncModal = ref(null) // { contactName, contactId, action, sends,
 function resetScheduledSyncPreference() {
   localStorage.removeItem(SYNC_PREF_KEY)
   scheduledSyncPreference.value = null
-  showToast("Schedule sync preference cleared. You'll be asked again next time.")
+  showPillNotification("Schedule sync preference cleared. You'll be asked again next time.")
 }
 
 async function applyScheduledSync(action, contactId, sends, allGroupMembers) {
@@ -511,7 +511,7 @@ async function addMemberToGroup(contactId) {
     const name = contact?.name ?? 'This person'
     await maybePromptScheduledSync('add', contactId, name, groupMembers.value)
   } catch (err) {
-    showToast(err.message, 'error')
+    showPillNotification(err.message, 'error')
   }
 }
 
@@ -523,7 +523,7 @@ async function addGroupChatToGroup(chat) {
     const added = groupMembers.value.find(m => m.type === 'group_chat' && m.chat_identifier === chat.chat_identifier)
     if (added) await maybePromptScheduledSync('add', added.id, added.name, groupMembers.value)
   } catch (err) {
-    showToast(err.message, 'error')
+    showPillNotification(err.message, 'error')
   }
 }
 
@@ -540,7 +540,7 @@ async function removeMemberFromGroup(member) {
     await loadGroups()
     await maybePromptScheduledSync('remove', member.id, member.name, membersWithContact)
   } catch (err) {
-    showToast(err.message, 'error')
+    showPillNotification(err.message, 'error')
   }
 }
 
@@ -579,7 +579,7 @@ async function importCsvGlobally(contacts) {
     if (added > 0) parts.push(`Added ${added} contact${added === 1 ? '' : 's'}`)
     if (alreadyImported > 0) parts.push(`${alreadyImported} already imported`)
     const message = parts.join(', ') + '.'
-    showToast(message)
+    showPillNotification(message)
     await loadGroups()
     if (selectedGroupId.value) await selectGroup(selectedGroupId.value)
   }
@@ -592,7 +592,7 @@ async function syncContacts(silent = false) {
     const result = await window.api.syncContactsFromMacOS()
     lastSyncTime.value = new Date()
     if (result.denied) {
-      showToast('Contacts permission denied. Allow permissions in System Settings and refresh.', 'error')
+      showPillNotification('Contacts permission denied. Allow permissions in System Settings and refresh.', 'error')
     } else {
       const parts = []
       if (result.count   > 0) parts.push(`${result.count} new`)
@@ -600,9 +600,9 @@ async function syncContacts(silent = false) {
       if (result.edited  > 0) parts.push(`${result.edited} edited`)
       if (result.removed > 0) parts.push(`${result.removed} removed`)
       if (parts.length > 0) {
-        showToast(`Contacts synced: ${parts.join(', ')}.`)
+        showPillNotification(`Contacts synced: ${parts.join(', ')}.`)
       } else if (!silent) {
-        showToast('Contacts up to date.')
+        showPillNotification('Contacts up to date.')
       }
     }
   } catch (err) {
@@ -618,11 +618,11 @@ async function refreshGroupChats() {
   try {
     const result = await window.api.refreshChatGroups()
     if (result.error) {
-      showToast('Failed to refresh group chats: ' + result.error, 'error')
+      showPillNotification('Failed to refresh group chats: ' + result.error, 'error')
     } else {
       const parts = [`${result.count} found`]
       if (result.updated > 0) parts.push(`${result.updated} membership${result.updated === 1 ? '' : 's'} updated`)
-      showToast(`Group chats refreshed: ${parts.join(', ')}.`)
+      showPillNotification(`Group chats refreshed: ${parts.join(', ')}.`)
     }
   } catch (err) {
     console.error('[GroupChats] Refresh error:', err.message)
@@ -739,6 +739,7 @@ async function onSendTextOnly(scheduledSendId) {
   --accent-h: #0051d5;
   --danger: #ff3b30;
   --danger-h: #c0392b;
+  --success: #34c759;
   --success-bg: var(--success-tint);
   --success-fg: var(--success-tint-text);
   --error-bg:   var(--error-tint);

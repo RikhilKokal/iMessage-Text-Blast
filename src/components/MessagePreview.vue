@@ -44,6 +44,12 @@ const props = defineProps({
   contacts:      { type: Array, required: true },
   contactGroups: { type: Array, default: null },
   // Array of { groupName: string, contacts: Contact[] }
+  memberOverrides: { type: Map, default: () => new Map() },
+  // Map of memberId → { firstName: "...", ... } (persistent contact-level overrides)
+  messageOverrides: { type: Object, default: () => ({}) },
+  // One-time message-level token overrides
+  emptyDefaults: { type: Object, default: () => ({}) },
+  // Default overrides for contacts with empty fields
 })
 
 const flatContacts = computed(() =>
@@ -94,17 +100,63 @@ function onClickOutside(e) {
 onMounted(()  => document.addEventListener('mousedown', onClickOutside))
 onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
 
+function formatMemberList(names) {
+  if (names.length === 0) return ''
+  if (names.length === 1) return names[0]
+  if (names.length === 2) return `${names[0]} and ${names[1]}`
+  return names.slice(0, -1).join(', ') + ', and ' + names[names.length - 1]
+}
+
 const renderedMessage = computed(() => {
   const c = current.value
   if (!c) return ''
+
+  let firstName, lastName, fullName
+
+  if (c.type === 'group_chat' && c.participants) {
+    firstName = formatMemberList(c.participants.firstNames)
+    lastName = formatMemberList(c.participants.lastNames)
+    fullName = formatMemberList(c.participants.fullNames)
+  } else {
+    firstName = c.name?.split(' ')[0] ?? ''
+    lastName = c.name?.split(' ').slice(1).join(' ') ?? ''
+    fullName = c.name ?? ''
+  }
+
+  // Get persistent contact-level overrides from Map, then merge with one-time message overrides
+  const persistentOverrides = props.memberOverrides.get(c.id) || {}
+  const overrides = { ...persistentOverrides, ...props.messageOverrides }
+
+  function resolveToken(tokenKey, contactValue, isFieldEmpty) {
+    if (overrides[tokenKey] !== undefined) {
+      return overrides[tokenKey]
+    }
+    if (isFieldEmpty && props.emptyDefaults[tokenKey] !== undefined) {
+      return props.emptyDefaults[tokenKey]
+    }
+    return contactValue
+  }
+
+  const nicknameDefault = c.type === 'group_chat' ? (c.nickname || c.name || '') : (c.nickname || firstName)
+
+  const tokens = {
+    firstName: resolveToken('firstName', firstName, !firstName),
+    lastName:  resolveToken('lastName', lastName, !lastName),
+    fullName:  resolveToken('fullName', fullName, !fullName),
+    email:     resolveToken('email', c.email || '(no email)', !c.email),
+    phone:     resolveToken('phone', c.type === 'group_chat' ? '(group chat)' : (c.phone || '(no phone)'), !c.phone || c.type === 'group_chat'),
+    company:   resolveToken('company', c.company || '(no company)', !c.company),
+    nickname:  resolveToken('nickname', nicknameDefault, !nicknameDefault),
+  }
+
   return props.template
-    .replace(/⟦firstName⟧/g,  c.name?.split(' ')[0] ?? '')
-    .replace(/⟦lastName⟧/g,   c.name?.split(' ').slice(1).join(' ') ?? '')
-    .replace(/⟦fullName⟧/g,   c.name     ?? '')
-    .replace(/⟦email⟧/g,      c.email    || '(no email)')
-    .replace(/⟦phone⟧/g,      c.type === 'group_chat' ? '(group chat)' : (c.phone || '(no phone)'))
-    .replace(/⟦company⟧/g,    c.company  || '(no company)')
-    .replace(/⟦nickname⟧/g,   c.nickname || c.name?.split(' ')[0] || '')
+    .replace(/⟦firstName⟧/g,  tokens.firstName)
+    .replace(/⟦lastName⟧/g,   tokens.lastName)
+    .replace(/⟦fullName⟧/g,   tokens.fullName)
+    .replace(/⟦email⟧/g,      tokens.email)
+    .replace(/⟦phone⟧/g,      tokens.phone)
+    .replace(/⟦company⟧/g,    tokens.company)
+    .replace(/⟦nickname⟧/g,   tokens.nickname)
 })
 </script>
 

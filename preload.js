@@ -33,6 +33,7 @@ const CH = {
   DB_REFRESH_CHAT_GROUPS:          'db:refreshChatGroups',
   DB_ADD_CHAT_GROUP_TO_GROUP:      'db:addChatGroupToGroup',
   DB_REMOVE_CHAT_GROUP_FROM_GROUP: 'db:removeChatGroupFromGroup',
+  DB_RESOLVE_CHAT_PARTICIPANTS:    'db:resolveChatParticipants',
 
   TAG_GET_ALL_FOR_GROUP:   'tag:getAllForGroup',
   TAG_CREATE:              'tag:create',
@@ -41,6 +42,14 @@ const CH = {
   TAG_ADD_TO_MEMBER:       'tag:addToMember',
   TAG_REMOVE_FROM_MEMBER:  'tag:removeFromMember',
   TAG_SET_MEMBERS:         'tag:setMembers',
+
+  CONTACT_GET_TOKEN_OVERRIDES:    'contact:getTokenOverrides',
+  CONTACT_SAVE_TOKEN_OVERRIDES:   'contact:saveTokenOverrides',
+  CONTACT_DELETE_TOKEN_OVERRIDES: 'contact:deleteTokenOverrides',
+
+  EMPTY_DEFAULTS_GET_TOKEN_OVERRIDES:    'emptyDefaults:getTokenOverrides',
+  EMPTY_DEFAULTS_SAVE_TOKEN_OVERRIDES:   'emptyDefaults:saveTokenOverrides',
+  EMPTY_DEFAULTS_DELETE_TOKEN_OVERRIDES: 'emptyDefaults:deleteTokenOverrides',
 
   DIALOG_OPEN_FILE:       'dialog:openFile',
   DIALOG_OPEN_ATTACHMENT: 'dialog:openAttachment',
@@ -172,6 +181,22 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke(CH.TAG_REMOVE_FROM_MEMBER, tagId, memberId),
   setTagMembers: (tagId, memberIds) =>
     ipcRenderer.invoke(CH.TAG_SET_MEMBERS, tagId, memberIds),
+
+  // ── Token Overrides ───────────────────────────────────────
+  getContactTokenOverrides: (contactId) =>
+    ipcRenderer.invoke(CH.CONTACT_GET_TOKEN_OVERRIDES, contactId),
+  saveContactTokenOverrides: (contactId, overrides) =>
+    ipcRenderer.invoke(CH.CONTACT_SAVE_TOKEN_OVERRIDES, contactId, overrides),
+  deleteContactTokenOverrides: (contactId) =>
+    ipcRenderer.invoke(CH.CONTACT_DELETE_TOKEN_OVERRIDES, contactId),
+
+  // ── Empty Value Defaults ───────────────────────────────────
+  getEmptyValueDefaults: () =>
+    ipcRenderer.invoke(CH.EMPTY_DEFAULTS_GET_TOKEN_OVERRIDES),
+  saveEmptyValueDefaults: (overrides) =>
+    ipcRenderer.invoke(CH.EMPTY_DEFAULTS_SAVE_TOKEN_OVERRIDES, overrides),
+  deleteEmptyValueDefaults: () =>
+    ipcRenderer.invoke(CH.EMPTY_DEFAULTS_DELETE_TOKEN_OVERRIDES),
 
   checkCapability: (members) =>
     ipcRenderer.invoke(CH.CONTACTS_CHECK_CAPABILITY, members),

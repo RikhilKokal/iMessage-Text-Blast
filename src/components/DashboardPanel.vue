@@ -53,7 +53,7 @@ defineEmits(['close'])
   justify-content: space-between;
   padding: 20px 24px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--surface);
   flex-shrink: 0;
 }
 .panel-header h2 { font-size: 17px; font-weight: 700; }
@@ -61,16 +61,15 @@ defineEmits(['close'])
 .header-right { display: flex; align-items: center; gap: 10px; }
 
 .btn-close {
-  width: 28px; height: 28px;
-  border-radius: 50%;
+  background: none;
   border: none;
-  background: var(--border);
-  color: var(--text);
-  font-size: 18px;
-  display: flex; align-items: center; justify-content: center;
-  padding: 0; cursor: pointer; flex-shrink: 0;
+  font-size: 14px;
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
 }
-.btn-close:hover { background: var(--text-2); color: #fff; }
+.btn-close:hover { background: var(--bg); color: var(--text); }
 
 .panel-body {
   flex: 1;
